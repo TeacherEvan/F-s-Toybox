@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "camera": { "x": 0, "y": 0, "zoom": 1 },
+  "globalMotion": { "paused": false, "timeScale": 1 },
+  "background": { "enabled": true, "spiralSpeed": 0.8, "starDensity": 1 },
+  "entities": []
+}

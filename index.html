@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>F's-Toybox</title></head>
+<body>
+<canvas id="gl" style="display:block;width:100vw;height:100vh;background:#000"></canvas>
+<div id="status" style="position:fixed;left:12px;bottom:12px;color:#8c8;font:11px monospace">boot…</div>
+<script>
+window.addEventListener('error', (e) => {
+  document.getElementById('status').textContent = 'ERR: ' + e.message;
+  document.getElementById('status').style.color = '#f88';
+});
+document.getElementById('status').textContent = 'ready';
+</script>
+</body>
+</html>
