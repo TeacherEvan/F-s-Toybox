@@ -54,8 +54,10 @@ describe('serialize / deserialize', () => {
 describe('orbit graph', () => {
   it('detects direct cycle A → B → A', () => {
     const s = new Scene();
-    const a = s.addEntity(createEntity('planet')); a.orbit.enabled = true; a.orbit.parentId = '__b__';
-    const b = s.addEntity(createEntity('planet')); b.orbit.enabled = true; b.orbit.parentId = a.id;
+    const a = s.addEntity(createEntity('planet'));
+    const b = s.addEntity(createEntity('planet'));
+    a.orbit.enabled = true; a.orbit.parentId = b.id;
+    b.orbit.enabled = true; b.orbit.parentId = a.id;
     expect(() => validateScene(s, { resolveOrbits: true })).toThrow(/cycle/);
   });
   it('rejects depth > 8', () => {
