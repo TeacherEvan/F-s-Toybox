@@ -1,0 +1,6 @@
+.DS_Store
+*.log
+.vitest/
+playwright-report/
+test-results/
+node_modules/
