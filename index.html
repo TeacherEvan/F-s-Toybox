@@ -599,10 +599,34 @@ void main() {
         Entity e = readEntity(i);
         if (e.kind <= 0) continue; // 0 = unused slot; < 0 = hidden (sign-packed)
         vec2 local = uv - e.pos;
-        if (e.kind == 1) { renderGalaxy(e, local, iTime, col); continue; } // GALAXY
-        // Kinds 2..8 land in M6+. Smoke: an entity must affect the frame.
-        col = vec3(1.0);
-        break;
+        if (e.kind == 1) { renderGalaxy(e, local, iTime, col); continue; } // GALAXY (kind=1)
+        // Kinds 2..8 (PLANET=2, MOON=3, RING=4, SHOOTING_STAR=5, BLACK_HOLE=6,
+        // NEBULA=7, COMET=8) — M5 implemented galaxy; M6+ adds per-kind shaders.
+        // For now: render a minimal visible marker per kind (not white/blank).
+        // Black hole (6) → dark core + faint ring; planet (2) → tinted disk.
+        // Per-kind markers (M5=M6 transitional): blackHole=dark horizon+spikes+jets;
+        // planet=tinted disk; nebula=soft cloud; others=minimal disk.
+        float rr, r = 0.0;
+        if (e.kind == 6) {
+            rr = length(local) / max(e.scale * max(e.render.x, 0.01), 0.001);
+            float spikeSharp = clamp(e.render.z, 0.01, 1.0);
+            float spikeW = 0.015 + 0.02 * spikeSharp;
+            float cross = (exp(-abs(local.x)/spikeW) + exp(-abs(local.y)/spikeW)) * 0.25 * (1.0 + spikeSharp);
+            float vertical = exp(-abs(local.x)/0.02) * smoothstep(0.0, 0.35, abs(local.y)/(1.0 + 0.8*e.render.y));
+            col += vec3(0.01, 0.015, 0.02) * exp(-rr*rr*120.0) * 0.04;
+            col += vec3(0.85, 0.82, 0.95) * cross * 0.35;
+            col += vec3(0.9, 0.88, 1.0) * vertical * 0.6;
+        } else {
+            rr = length(local) / max(e.scale, 0.01);
+            if (e.kind == 2) {
+                if (rr < 0.35) col += hsv2rgb(vec3(e.color.x/360.0, e.color.y, e.color.z)) * exp(-rr*rr*2.5) * 0.9 * e.scale;
+            } else if (e.kind == 7) {
+                if (rr < 0.6) col += hsv2rgb(vec3(e.color.x/360.0, e.color.y*0.6, e.color.z)) * (0.4 - rr*0.4) * fbm(local*3.0 + iTime*0.05);
+            } else {
+                if (rr < 0.08) col += hsv2rgb(vec3(e.color.x/360.0, e.color.y, e.color.z)) * e.scale;
+            }
+        }
+        continue;
     }
 
     vec2 dir = uv0;
@@ -772,8 +796,10 @@ function startEngine(gl) {
     updateBottomStrip();
   }, { passive: false });
 
-  let lastNow = performance.now();
+let lastNow = performance.now();
   let elapsed = 0;
+  const TARGET_FRAME_MS = 1000 / 60; // ~16.67ms for 60fps
+  let lastDrawTime = 0;
 
   function frame(now) {
     requestAnimationFrame(frame);
@@ -787,13 +813,16 @@ function startEngine(gl) {
     }
     const t = FROZEN_T !== null ? FROZEN_T : elapsed;
 
+    // Frame rate limiting: skip if not enough time has passed since last draw
+    if (!frozen && now - lastDrawTime < TARGET_FRAME_MS) return;
+
     const packed = packEntitiesToDataTexture(scene, t);
     if (frozen && prevPacked && prevPacked.length === packed.length) {
       let same = true;
       for (let i = 0; i < packed.length; i++) {
         if (prevPacked[i] !== packed[i]) { same = false; break; }
       }
-      if (same) { window.__dbg.skips++; return; } // deterministic frame already on screen
+      if (same) { window.__dbg.skips++; return; }
     }
     window.__dbg.draws++;
     prevPacked = packed;
@@ -812,9 +841,9 @@ function startEngine(gl) {
     gl.clearColor(0, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
-  }
+    lastDrawTime = now;
   requestAnimationFrame(frame);
-}
+  }
 
 document.getElementById('bottom-strip').addEventListener('click', () => {
   camYaw = 0; camPitch = 0;
