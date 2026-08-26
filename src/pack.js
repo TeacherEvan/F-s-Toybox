@@ -1,11 +1,22 @@
-// F's-Toybox entity packer (M4) — JS scene state → 64×4 RGBA32F data texture.
-// Layout contract (design §5.1, Risk #13): width=64 columns (one per entity),
-// height=4 rows (four vec4 slots). A 1-tall texture would return border color
-// for rows 2/3/4 — do NOT change back to 64×1.
+// F's-Toybox entity packer (M4/M5) — JS scene state → GPU data texture.
+//
+// Encoding: RGBA8 byte texture, 1024×1 (4096 bytes). Each entity owns 64
+// consecutive BYTES = 16 float32 values, stored as exact IEEE-754 bit
+// patterns (little-endian) across 16 texels. The shader decodes via
+// uintBitsToFloat. Byte-exact and free of float-texture-support
+// requirements — RGBA32F sampling proved unreliable under software GL
+// (rows 1-3 sampled as zero; texelFetch worse), and avoiding float
+// textures also helps aged wallpaper-GPU drivers (design Risk #6).
+//
+// Per-entity float layout (design §5.1, §3.5):
+//   [0] kind (sign = visible)  [1] pos.x  [2] pos.y  [3] parentSlot-or-rotation
+//   [4] color.h/360  [5] s     [6] b      [7] scale
+//   [8..11]  motion p0..p3    [12..15] render r0..r3
 import { KIND_GPU } from './scene.js';
 
 export const MAX_ENTITIES = 64;
-const SLOTS_PER_ENTITY = 4;
+const FLOATS_PER_ENTITY = 16;
+export const TEX_WIDTH = MAX_ENTITIES * FLOATS_PER_ENTITY; // 1024 texels
 
 // Per-kind named-field → slot map (design §3.5). The shader sees a uniform
 // motion:vec4 / render:vec4 regardless of kind; null leaves the slot at 0.
@@ -64,49 +75,43 @@ export function resolveWorldPosition(entity, scene, time) {
 }
 
 export function packEntitiesToDataTexture(scene, time) {
-  // 64 columns × 4 rows × 4 floats = 1024 floats
-  const data = new Float32Array(MAX_ENTITIES * SLOTS_PER_ENTITY * 4);
+  // 64 entities × 16 floats × 4 bytes = 4096 bytes = 1024 RGBA texels
+  const bytes = new Uint8Array(MAX_ENTITIES * FLOATS_PER_ENTITY * 4);
+  const dv = new DataView(bytes.buffer);
 
   for (let i = 0; i < scene.entities.length && i < MAX_ENTITIES; i++) {
     const e = scene.entities[i];
     const world = resolveWorldPosition(e, scene, time);
     const isChainRoot = !e.orbit.enabled || e.orbit.parentId == null;
-    const base = i * SLOTS_PER_ENTITY * 4;
+    const base = i * FLOATS_PER_ENTITY * 4; // byte offset
+    let f = 0;
+    const put = (v) => { dv.setFloat32(base + f * 4, v, true); f++; };
 
-    // vec4[0]: kind (sign = visible), pos.x, pos.y, parentSlot-or-rotation
+    // float[0..3]: kind (sign = visible), pos, parentSlot-or-rotation.
     // Hidden entities are negative-kind so the shader skips them with one
-    // branch (`kind <= 0` covers both unused slots and hidden entities).
-    data[base + 0] = (e.visible === false ? -1 : 1) * (KIND_BY_NAME[e.kind] ?? 0);
-    data[base + 1] = world.x;
-    data[base + 2] = world.y;
-    data[base + 3] = isChainRoot ? e.rotation : i; // M7 refines child lookup
+    // branch (`kind <= 0` covers unused slots and hidden entities).
+    put((e.visible === false ? -1 : 1) * (KIND_BY_NAME[e.kind] ?? 0));
+    put(world.x);
+    put(world.y);
+    put(isChainRoot ? e.rotation : i); // M7 refines child lookup
 
-    // vec4[1]: h/360, s, b, scale (h stored as degrees in JSON; packer divides)
-    data[base + 4] = e.color.h / 360;
-    data[base + 5] = e.color.s;
-    data[base + 6] = e.color.b;
-    data[base + 7] = e.scale;
+    // float[4..7]: h/360 (degrees → 0..1 here, ONE place per design), s, b, scale
+    put(e.color.h / 360);
+    put(e.color.s);
+    put(e.color.b);
+    put(e.scale);
 
-    // vec4[2]: motion.p0..p3 (per-kind, design §3.5)
-    const m = slotValues(MOTION_SLOTS, e.kind, e.motion);
-    data[base + 8]  = m[0];
-    data[base + 9]  = m[1];
-    data[base + 10] = m[2];
-    data[base + 11] = m[3];
-
-    // vec4[3]: render.r0..r2 (+ r3 for kinds that use all four)
-    const r = slotValues(RENDER_SLOTS, e.kind, e.render);
-    data[base + 12] = r[0];
-    data[base + 13] = r[1];
-    data[base + 14] = r[2];
-    data[base + 15] = r[3];
+    // float[8..11]: motion p0..p3 (per-kind, design §3.5)
+    for (const v of slotValues(MOTION_SLOTS, e.kind, e.motion)) put(v);
+    // float[12..15]: render r0..r3
+    for (const v of slotValues(RENDER_SLOTS, e.kind, e.render)) put(v);
   }
-  return data;
+  return bytes;
 }
 
-export function uploadEntityTexture(gl, tex, data) {
+export function uploadEntityTexture(gl, tex, bytes) {
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, tex);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, MAX_ENTITIES, SLOTS_PER_ENTITY, 0,
-                gl.RGBA, gl.FLOAT, data);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, TEX_WIDTH, 1, 0,
+                gl.RGBA, gl.UNSIGNED_BYTE, bytes);
 }

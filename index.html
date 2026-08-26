@@ -477,23 +477,92 @@ struct Entity {
     float baseRotation;
 };
 
+// Byte-exact float decode from the RGBA8 data texture (little-endian
+// float32 bits packed across one texel's RGBA channels).
+float decodeFloat(vec4 b) {
+    return uintBitsToFloat(uint(b.r * 255.0 + 0.5)
+                         | (uint(b.g * 255.0 + 0.5) << 8)
+                         | (uint(b.b * 255.0 + 0.5) << 16)
+                         | (uint(b.a * 255.0 + 0.5) << 24));
+}
+
 Entity readEntity(int i) {
-    float u = (float(i) + 0.5) / float(MAX_ENTITIES);
-    vec4 v0 = texture(uEntityTex, vec2(u, 0.5 / 4.0));
-    vec4 v1 = texture(uEntityTex, vec2(u, 1.5 / 4.0));
-    vec4 v2 = texture(uEntityTex, vec2(u, 2.5 / 4.0));
-    vec4 v3 = texture(uEntityTex, vec2(u, 3.5 / 4.0));
+    int base = i * 16;
+    float f0  = decodeFloat(texelFetch(uEntityTex, ivec2(base + 0, 0), 0));
+    float f1  = decodeFloat(texelFetch(uEntityTex, ivec2(base + 1, 0), 0));
+    float f2  = decodeFloat(texelFetch(uEntityTex, ivec2(base + 2, 0), 0));
+    float f3  = decodeFloat(texelFetch(uEntityTex, ivec2(base + 3, 0), 0));
+    float f4  = decodeFloat(texelFetch(uEntityTex, ivec2(base + 4, 0), 0));
+    float f5  = decodeFloat(texelFetch(uEntityTex, ivec2(base + 5, 0), 0));
+    float f6  = decodeFloat(texelFetch(uEntityTex, ivec2(base + 6, 0), 0));
+    float f7  = decodeFloat(texelFetch(uEntityTex, ivec2(base + 7, 0), 0));
+    float f8  = decodeFloat(texelFetch(uEntityTex, ivec2(base + 8, 0), 0));
+    float f9  = decodeFloat(texelFetch(uEntityTex, ivec2(base + 9, 0), 0));
+    float f10 = decodeFloat(texelFetch(uEntityTex, ivec2(base + 10, 0), 0));
+    float f11 = decodeFloat(texelFetch(uEntityTex, ivec2(base + 11, 0), 0));
+    float f12 = decodeFloat(texelFetch(uEntityTex, ivec2(base + 12, 0), 0));
+    float f13 = decodeFloat(texelFetch(uEntityTex, ivec2(base + 13, 0), 0));
+    float f14 = decodeFloat(texelFetch(uEntityTex, ivec2(base + 14, 0), 0));
+    float f15 = decodeFloat(texelFetch(uEntityTex, ivec2(base + 15, 0), 0));
     Entity e;
-    e.kind          = int(v0.x);
-    e.pos           = v0.yz;
-    e.baseRotation  = v0.w;
-    e.color         = v1.xyz;
-    e.scale         = v1.w;
-    e.motion        = v2;
-    e.render        = v3;
+    e.kind          = int(f0);
+    e.pos           = vec2(f1, f2);
+    e.baseRotation  = f3;
+    e.color         = vec3(f4, f5, f6);
+    e.scale         = f7;
+    e.motion        = vec4(f8, f9, f10, f11);
+    e.render        = vec4(f12, f13, f14, f15);
     // Child parentSlot lookup lands in M7 (ring/moon parenting).
     e.parentSlot    = -1.0;
     return e;
+}
+
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+// M5 — galaxy kind (design §6.1). Shape carried forward from renderCosmos;
+// constants driven by per-entity slots (design §3.5):
+//   motion.x=spin  motion.y=pulse  motion.z=wobble
+//   render.x=coreBright  render.y=dust  render.z=armSharp  render.w=coreSize
+// uv arrives LOCAL (fragUV - e.pos). Effective intrinsic angle =
+// baseRotation + t*spin; scale divides local coords (design §3.4).
+void renderGalaxy(Entity e, vec2 uv, float time, inout vec3 col) {
+    vec2 suv = uv / max(e.scale, 0.01);
+    float r = length(suv);
+    if (r > 1.8) return; // cheap cull beyond reach
+
+    float spinAng = e.baseRotation + time * e.motion.x;
+    float wobble = e.motion.z * sin(time * 0.5);
+    vec2 gUV = rotate2D(spinAng + wobble) * suv;
+    float rr = length(gUV);
+    float phi = atan(gUV.y, gUV.x);
+
+    // Differential swirl keeps arms trailing; arm sharpness moves the
+    // smoothstep lower bound (default 0.7 ≈ reference's -0.2).
+    float omega = 0.4 / (rr + 0.25);
+    float spiralAngle = phi + omega * time * clamp(e.motion.x, 0.05, 4.0)
+                      + 2.5 * log(max(rr, 0.01));
+    float armLo = mix(-0.8, 0.4, e.render.z);
+    float armPattern = smoothstep(armLo, 1.0, cos(2.0 * spiralAngle));
+
+    float coreFall = 6.0 * (0.5 / max(e.render.w, 0.01));
+    float core = exp(-rr * coreFall);
+    float arms = armPattern * exp(-rr * 2.2)
+               * (1.0 + e.render.y * fbm(gUV * 8.0 + time * 0.1));
+
+    // Warm physical core; arms take the entity's declared hue/brightness.
+    // Gains sized so the galaxy reads as a DISTINCT object after the ACES
+    // tonemapper crushes brights (a bg-parity gain renders invisible).
+    vec3 armTint = hsv2rgb(vec3(e.color.x, min(e.color.y + 0.05, 1.0), e.color.z));
+    float breathe = 1.0 + e.motion.y * 0.5 * sin(time * 2.0);
+    vec3 field = vec3(0.008, 0.006, 0.016)
+               + core * vec3(1.0, 0.85, 0.6) * e.render.x * 1.7 * breathe
+               + arms * armTint * 3.2;
+    float coverage = 1.0 - smoothstep(0.185, 0.235, r);
+    col = mix(col, field, coverage);
 }
 
 vec3 aces(vec3 x) {
@@ -529,7 +598,9 @@ void main() {
     for (int i = 0; i < MAX_ENTITIES; i++) {
         Entity e = readEntity(i);
         if (e.kind <= 0) continue; // 0 = unused slot; < 0 = hidden (sign-packed)
-        // Per-kind rendering lands in M5+. Smoke: an entity must affect the frame.
+        vec2 local = uv - e.pos;
+        if (e.kind == 1) { renderGalaxy(e, local, iTime, col); continue; } // GALAXY
+        // Kinds 2..8 land in M6+. Smoke: an entity must affect the frame.
         col = vec3(1.0);
         break;
     }
@@ -571,6 +642,9 @@ function bootGL() {
   if (maxComponents < 896) {
     throw new Error(`Spec violation: MAX_FRAGMENT_UNIFORM_COMPONENTS=${maxComponents} < 896 (ES 3.0 minimum)`);
   }
+  if (gl.getParameter(gl.MAX_TEXTURE_SIZE) < 1024) {
+    throw new Error('Spec violation: MAX_TEXTURE_SIZE < 1024 (entity data texture requirement)');
+  }
   return gl;
 }
 
@@ -585,6 +659,7 @@ function compileShader(gl, type, src, label) {
 }
 
 let camYaw = 0, camPitch = 0;
+let prevPacked = null; // frozen scenes skip redraw until scene/camera data changes
 
 function updateBottomStrip() {
   const zoom = scene ? scene.camera.zoom : 1;
@@ -630,6 +705,37 @@ function startEngine(gl) {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   gl.uniform1i(U.uEntityTex, 0);
 
+  /* Test hooks (used by Playwright specs; harmless in production). */
+  window.__dbg = { draws: 0, skips: 0 };
+  // Luma read straight from the drawing buffer. GL rows are bottom-up;
+  // output is flipped to top-down so callers use canvas coordinates.
+  window.__readLuma = (x, y, w, h) => {
+    const px = new Uint8Array(w * h * 4);
+    gl.readPixels(x, canvas.height - y - h, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    const out = new Float32Array(w * h);
+    for (let row = 0; row < h; row++) {
+      const src = (h - 1 - row) * w * 4;
+      const dst = row * w;
+      for (let col = 0; col < w; col++) {
+        const i = src + col * 4;
+        out[dst + col] = (0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2]) / 255;
+      }
+    }
+    return out;
+  };
+  window.__readRGB = (x, y) => {
+    const px = new Uint8Array(4);
+    gl.readPixels(x, canvas.height - y - 1, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    return [px[0], px[1], px[2]];
+  };
+  window.__glErr = () => gl.getError();
+  window.__packDump = () => Array.from(packEntitiesToDataTexture(scene, FROZEN_T !== null ? FROZEN_T : 0)).slice(0, 8);
+  window.__reupload = () => {
+    uploadEntityTexture(gl, entityTex, packEntitiesToDataTexture(scene, FROZEN_T !== null ? FROZEN_T : elapsed));
+    prevPacked = null;
+    return gl.getError();
+  };
+
   function resize() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const w = Math.max(1, Math.floor(window.innerWidth * dpr));
@@ -655,12 +761,14 @@ function startEngine(gl) {
     camYaw += ((e.clientX - lastX) / canvas.clientWidth) * 2.0;
     camPitch += ((e.clientY - lastY) / canvas.clientHeight) * 2.0;
     lastX = e.clientX; lastY = e.clientY;
+    prevPacked = null; // camera moved: force repaint even when frozen
     updateBottomStrip();
   });
   canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
     if (!scene) return;
     scene.camera.zoom = Math.max(0.2, Math.min(5.0, scene.camera.zoom * (1 + e.deltaY * 0.001)));
+    prevPacked = null;
     updateBottomStrip();
   }, { passive: false });
 
@@ -671,14 +779,25 @@ function startEngine(gl) {
     requestAnimationFrame(frame);
     resize();
     if (!scene) return;
+    const frozen = FROZEN_T !== null;
     const dt = Math.min((now - lastNow) / 1000, 0.1);
     lastNow = now;
-    if (!scene.globalMotion.paused && FROZEN_T === null) {
+    if (!scene.globalMotion.paused && !frozen) {
       elapsed += dt * scene.globalMotion.timeScale;
     }
     const t = FROZEN_T !== null ? FROZEN_T : elapsed;
 
-    uploadEntityTexture(gl, entityTex, packEntitiesToDataTexture(scene, t));
+    const packed = packEntitiesToDataTexture(scene, t);
+    if (frozen && prevPacked && prevPacked.length === packed.length) {
+      let same = true;
+      for (let i = 0; i < packed.length; i++) {
+        if (prevPacked[i] !== packed[i]) { same = false; break; }
+      }
+      if (same) { window.__dbg.skips++; return; } // deterministic frame already on screen
+    }
+    window.__dbg.draws++;
+    prevPacked = packed;
+    uploadEntityTexture(gl, entityTex, packed);
 
     gl.uniform2f(U.iResolution, canvas.width, canvas.height);
     gl.uniform1f(U.iTime, t);
@@ -700,6 +819,7 @@ function startEngine(gl) {
 document.getElementById('bottom-strip').addEventListener('click', () => {
   camYaw = 0; camPitch = 0;
   if (scene) scene.camera.zoom = 1;
+  prevPacked = null;
   updateBottomStrip();
 });
 
