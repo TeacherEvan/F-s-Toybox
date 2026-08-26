@@ -1,10 +1,22 @@
 // F's-Toybox scene model — M2.
-// JS-side string kinds. GLSL-side KIND_GPU enum (in src/pack.js) maps these
-// to integer slot codes; the packer handles the translation on every upload.
 export const ENTITY_KINDS = ['galaxy','planet','moon','ring','shootingStar','blackHole','nebula','comet'];
 
 // The order in the array is significant: it's the order in which
 // +Add buttons appear in the God Panel toolbar (M3.1). Keep stable.
+
+// GLSL-side kind enum (design §3.1). Kind 0 is reserved for "unused slot";
+// the packer sign-encodes visibility into the same int (negative = hidden).
+export const KIND_GPU = {
+  UNUSED:        0,
+  GALAXY:        1,
+  PLANET:        2,
+  MOON:          3,
+  RING:          4,
+  SHOOTING_STAR: 5,
+  BLACK_HOLE:    6,
+  NEBULA:        7,
+  COMET:         8,
+};
 
 const DEFAULTS = {
   galaxy:        { motion: { spin: 0.4, pulse: 0.2, wobble: 0.0 },

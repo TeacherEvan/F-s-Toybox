@@ -106,6 +106,7 @@
 
 <script type="module">
 import { Scene, createEntity, serialize, deserialize } from './src/scene.js';
+import { uploadEntityTexture, packEntitiesToDataTexture } from './src/pack.js';
 
 const KIND_LABELS = {
   galaxy: 'Galaxy', planet: 'Planet', moon: 'Moon',
@@ -336,7 +337,371 @@ for (const id of ['hide-all-btn', 'pause-btn', 'save-btn', 'load-btn']) {
   document.getElementById(id).addEventListener('click', () => {});
 }
 
-document.getElementById('bottom-strip').addEventListener('click', () => {});
+/* ================= WebGL2 engine (M4) ================= */
+
+// Determinism hook (design §3.3): ?seed=42&t=0 freezes the clock at t and
+// seeds every hash function. Parsed once at boot; changing requires reload.
+const urlParams = new URLSearchParams(location.search);
+const SEED = urlParams.get('seed') !== null ? Number(urlParams.get('seed')) : 0;
+const FROZEN_T = urlParams.get('t') !== null ? Number(urlParams.get('t')) : null;
+
+function paint2DFallback(canvas, msg) {
+  const c2 = canvas.getContext('2d');
+  if (!c2) return;
+  c2.fillStyle = '#000';
+  c2.fillRect(0, 0, canvas.width, canvas.height);
+  c2.fillStyle = '#f88';
+  c2.font = 'bold 18px ui-monospace, monospace';
+  c2.textAlign = 'center';
+  c2.textBaseline = 'middle';
+  c2.fillText('WebGL2 unavailable', canvas.width / 2, canvas.height / 2 - 30);
+  c2.font = '12px ui-monospace, monospace';
+  c2.fillStyle = '#faa';
+  const words = msg.split(' ');
+  let line = '', y = canvas.height / 2;
+  for (const w of words) {
+    if ((line + ' ' + w).length > 70) { c2.fillText(line, canvas.width / 2, y); y += 16; line = w; }
+    else line = line + ' ' + w;
+  }
+  if (line) c2.fillText(line, canvas.width / 2, y);
+}
+
+const VERT = `#version 300 es
+in vec2 aPos;
+void main() { gl_Position = vec4(aPos, 0.0, 1.0); }
+`;
+
+const FRAG = `#version 300 es
+precision highp float;
+
+uniform vec2  iResolution;
+uniform float iTime;
+uniform float uChroma;
+uniform float uGrain;
+uniform vec2  uMouse;
+uniform float uZoom;
+uniform float uSeed;
+uniform float uSpiralSpeed;
+uniform float uStarDensity;
+uniform sampler2D uEntityTex;
+
+out vec4 fragColor;
+
+#define PI 3.14159265359
+#define TWO_PI 6.28318530718
+#define MAX_ENTITIES 64
+
+mat2 rotate2D(float angle) {
+    float s = sin(angle), c = cos(angle);
+    return mat2(c, -s, s, c);
+}
+
+float hash11(float p) {
+    p = fract(p * 0.1031 + uSeed);
+    p *= p + 33.33;
+    p *= p + p;
+    return fract(p);
+}
+
+vec2 hash22(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973) + uSeed);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.xx + p3.yz) * p3.zy);
+}
+
+float noise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(dot(hash22(i + vec2(0.0, 0.0)), f - vec2(0.0, 0.0)),
+                   dot(hash22(i + vec2(1.0, 0.0)), f - vec2(1.0, 0.0)), u.x),
+               mix(dot(hash22(i + vec2(0.0, 1.0)), f - vec2(0.0, 1.0)),
+                   dot(hash22(i + vec2(1.0, 1.0)), f - vec2(1.0, 1.0)), u.x), u.y);
+}
+
+float fbm(vec2 p) {
+    float v = 0.0;
+    float a = 0.5;
+    mat2 rot = rotate2D(0.37);
+    for (int i = 0; i < 4; i++) {
+        v += a * noise(p);
+        p = rot * p * 2.0;
+        a *= 0.5;
+    }
+    return v;
+}
+
+vec3 renderCosmos(vec2 uv, float time) {
+    vec3 col = vec3(0.02, 0.015, 0.04);
+
+    vec2 gUV = uv;
+    float r = length(gUV);
+    float phi = atan(gUV.y, gUV.x);
+
+    float omega = 0.4 / (r + 0.25);
+    float spiralAngle = phi + omega * time * uSpiralSpeed + 2.5 * log(max(r, 0.01));
+    float armPattern = cos(2.0 * spiralAngle);
+    armPattern = smoothstep(-0.2, 1.0, armPattern);
+
+    float core = exp(-r * 6.0);
+    float arms = armPattern * exp(-r * 2.2) * (1.0 + 0.6 * fbm(gUV * 8.0 + time * 0.1));
+
+    vec3 coreCol = vec3(1.0, 0.85, 0.6);
+    vec3 armCol  = vec3(0.4, 0.2, 0.85);
+    col += core * coreCol * 2.0;
+    col += arms * armCol * 1.5;
+
+    for (int layer = 1; layer <= 3; layer++) {
+        float fLayer = float(layer);
+        vec2 sUV = uv * (12.0 * fLayer);
+        sUV.x += time * 0.2 * fLayer;
+        vec2 id = floor(sUV);
+        vec2 gv = fract(sUV) - 0.5;
+
+        vec2 rnd = hash22(id);
+        float star = smoothstep(0.1 * rnd.x, 0.0, length(gv - (rnd - 0.5) * 0.7));
+        float twinkle = 0.6 + 0.4 * sin(time * 3.0 + rnd.y * TWO_PI);
+        col += star * twinkle * vec3(0.8, 0.9, 1.0) * (0.6 / fLayer) * uStarDensity;
+    }
+    return col;
+}
+
+struct Entity {
+    int kind;
+    vec2 pos;
+    float parentSlot;
+    vec3 color;
+    float scale;
+    vec4 motion;
+    vec4 render;
+    float baseRotation;
+};
+
+Entity readEntity(int i) {
+    float u = (float(i) + 0.5) / float(MAX_ENTITIES);
+    vec4 v0 = texture(uEntityTex, vec2(u, 0.5 / 4.0));
+    vec4 v1 = texture(uEntityTex, vec2(u, 1.5 / 4.0));
+    vec4 v2 = texture(uEntityTex, vec2(u, 2.5 / 4.0));
+    vec4 v3 = texture(uEntityTex, vec2(u, 3.5 / 4.0));
+    Entity e;
+    e.kind          = int(v0.x);
+    e.pos           = v0.yz;
+    e.baseRotation  = v0.w;
+    e.color         = v1.xyz;
+    e.scale         = v1.w;
+    e.motion        = v2;
+    e.render        = v3;
+    // Child parentSlot lookup lands in M7 (ring/moon parenting).
+    e.parentSlot    = -1.0;
+    return e;
+}
+
+vec3 aces(vec3 x) {
+    const float a = 2.51, b = 0.03, c = 2.43, d = 0.59, e = 0.14;
+    return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
+}
+
+vec3 grade(vec3 c) {
+    vec3 shadows    = vec3(0.92, 1.02, 1.08);
+    vec3 highlights = vec3(1.08, 1.02, 0.95);
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    return mix(c * shadows, c * highlights, smoothstep(0.0, 1.0, l));
+}
+
+float hash13(vec3 p) {
+    p = fract(p * 0.1031 + uSeed);
+    p += dot(p, p.yzx + 33.33);
+    return fract((p.x + p.y) * p.z);
+}
+
+void main() {
+    vec2 frag = gl_FragCoord.xy;
+    vec2 uv0 = (frag - 0.5 * iResolution.xy) / iResolution.y;
+
+    float yaw = uMouse.x;
+    float pitch = clamp(uMouse.y, -1.2, 1.2);
+    mat2 Ry = mat2(cos(yaw), -sin(yaw), sin(yaw), cos(yaw));
+    mat2 Rx = mat2(1.0, 0.0, 0.0, cos(pitch));
+    vec2 uv = (Rx * (Ry * uv0)) * uZoom;
+
+    vec3 col = renderCosmos(uv, iTime);
+
+    for (int i = 0; i < MAX_ENTITIES; i++) {
+        Entity e = readEntity(i);
+        if (e.kind <= 0) continue; // 0 = unused slot; < 0 = hidden (sign-packed)
+        // Per-kind rendering lands in M5+. Smoke: an entity must affect the frame.
+        col = vec3(1.0);
+        break;
+    }
+
+    vec2 dir = uv0;
+    float ca = uChroma * length(dir) * 0.5;
+    col.r *= 1.0 + ca * 0.25;
+    col.b *= 1.0 + ca * 0.35;
+    col.g *= 1.0 - ca * 0.10;
+
+    col = aces(col);
+    col = grade(col);
+    col = pow(col, vec3(1.0 / 2.2));
+
+    float v = 1.0 - dot(uv0, uv0) * 0.35;
+    col *= clamp(v, 0.0, 1.0);
+
+    float g = (hash13(vec3(frag, iTime)) - 0.5) * uGrain;
+    col += g;
+
+    fragColor = vec4(col, 1.0);
+}
+`;
+
+function bootGL() {
+  const canvas = document.getElementById('gl');
+  const gl = canvas.getContext('webgl2', { antialias: false, preserveDrawingBuffer: true });
+  if (!gl) {
+    paint2DFallback(canvas,
+      'This browser does not expose a WebGL2 context. Try Chrome / Firefox / Edge with hardware acceleration enabled.');
+    const st = document.getElementById('status');
+    st.textContent = 'WebGL2 unavailable';
+    st.classList.add('err');
+    return null;
+  }
+  const maxComponents = gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_COMPONENTS);
+  console.log('WebGL2 OK. MAX_FRAGMENT_UNIFORM_COMPONENTS =', maxComponents);
+  // ES 3.0 spec minimum is 896 (NOT the GLSL ES 1.00 figure of 1024).
+  if (maxComponents < 896) {
+    throw new Error(`Spec violation: MAX_FRAGMENT_UNIFORM_COMPONENTS=${maxComponents} < 896 (ES 3.0 minimum)`);
+  }
+  return gl;
+}
+
+function compileShader(gl, type, src, label) {
+  const sh = gl.createShader(type);
+  gl.shaderSource(sh, src);
+  gl.compileShader(sh);
+  if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+    throw new Error(`Shader compile failed (${label}): ${gl.getShaderInfoLog(sh)}`);
+  }
+  return sh;
+}
+
+let camYaw = 0, camPitch = 0;
+
+function updateBottomStrip() {
+  const zoom = scene ? scene.camera.zoom : 1;
+  const paused = scene && scene.globalMotion.paused ? ' · paused' : '';
+  document.getElementById('bottom-strip').textContent =
+    `cam yaw ${camYaw.toFixed(2)} · pitch ${camPitch.toFixed(2)} · zoom ${zoom.toFixed(2)}${paused}`;
+}
+
+function startEngine(gl) {
+  const canvas = document.getElementById('gl');
+
+  const prog = gl.createProgram();
+  gl.attachShader(prog, compileShader(gl, gl.VERTEX_SHADER, VERT, 'vertex'));
+  gl.attachShader(prog, compileShader(gl, gl.FRAGMENT_SHADER, FRAG, 'fragment'));
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+    throw new Error('Program link failed: ' + gl.getProgramInfoLog(prog));
+  }
+  gl.useProgram(prog);
+
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+    -1, -1,  1, -1, -1,  1,
+    -1,  1,  1, -1,  1,  1,
+  ]), gl.STATIC_DRAW);
+  const aPos = gl.getAttribLocation(prog, 'aPos');
+  gl.enableVertexAttribArray(aPos);
+  gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+  const U = {};
+  for (const name of ['iResolution', 'iTime', 'uChroma', 'uGrain', 'uMouse',
+                      'uZoom', 'uSeed', 'uSpiralSpeed', 'uStarDensity', 'uEntityTex']) {
+    U[name] = gl.getUniformLocation(prog, name);
+  }
+
+  const entityTex = gl.createTexture();
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, entityTex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.uniform1i(U.uEntityTex, 0);
+
+  function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = Math.max(1, Math.floor(window.innerWidth * dpr));
+    const h = Math.max(1, Math.floor(window.innerHeight * dpr));
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w; canvas.height = h;
+      gl.viewport(0, 0, w, h);
+    }
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  /* Camera: plain drag = tilt/rotate, wheel = zoom (design §4.3). */
+  let dragging = false, lastX = 0, lastY = 0;
+  canvas.addEventListener('pointerdown', (e) => {
+    dragging = true; lastX = e.clientX; lastY = e.clientY;
+    canvas.setPointerCapture(e.pointerId);
+  });
+  canvas.addEventListener('pointerup', () => { dragging = false; });
+  canvas.addEventListener('pointercancel', () => { dragging = false; });
+  canvas.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    camYaw += ((e.clientX - lastX) / canvas.clientWidth) * 2.0;
+    camPitch += ((e.clientY - lastY) / canvas.clientHeight) * 2.0;
+    lastX = e.clientX; lastY = e.clientY;
+    updateBottomStrip();
+  });
+  canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    if (!scene) return;
+    scene.camera.zoom = Math.max(0.2, Math.min(5.0, scene.camera.zoom * (1 + e.deltaY * 0.001)));
+    updateBottomStrip();
+  }, { passive: false });
+
+  let lastNow = performance.now();
+  let elapsed = 0;
+
+  function frame(now) {
+    requestAnimationFrame(frame);
+    resize();
+    if (!scene) return;
+    const dt = Math.min((now - lastNow) / 1000, 0.1);
+    lastNow = now;
+    if (!scene.globalMotion.paused && FROZEN_T === null) {
+      elapsed += dt * scene.globalMotion.timeScale;
+    }
+    const t = FROZEN_T !== null ? FROZEN_T : elapsed;
+
+    uploadEntityTexture(gl, entityTex, packEntitiesToDataTexture(scene, t));
+
+    gl.uniform2f(U.iResolution, canvas.width, canvas.height);
+    gl.uniform1f(U.iTime, t);
+    gl.uniform1f(U.uChroma, 0.35);
+    gl.uniform1f(U.uGrain, 0.06);
+    gl.uniform2f(U.uMouse, camYaw, camPitch);
+    gl.uniform1f(U.uZoom, scene.camera.zoom);
+    gl.uniform1f(U.uSeed, SEED);
+    gl.uniform1f(U.uSpiralSpeed, scene.background.spiralSpeed);
+    gl.uniform1f(U.uStarDensity, scene.background.starDensity);
+
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+  }
+  requestAnimationFrame(frame);
+}
+
+document.getElementById('bottom-strip').addEventListener('click', () => {
+  camYaw = 0; camPitch = 0;
+  if (scene) scene.camera.zoom = 1;
+  updateBottomStrip();
+});
 
 /* ---------- boot ---------- */
 
@@ -352,9 +717,12 @@ async function boot() {
   window.scene = scene;
   window.createEntity = createEntity;
   renderAll();
+  updateBottomStrip();
   document.getElementById('status').textContent = 'ready';
 }
 
+const glCtx = bootGL();
+if (glCtx) startEngine(glCtx);
 boot();
 </script>
 </body>

@@ -54,11 +54,12 @@ describe('64×4 data texture packing', () => {
     const p = s.addEntity(createEntity('planet'));
     const m = s.addEntity(createEntity('moon'));
     m.orbit = { enabled: true, parentId: p.id, radius: 0.5, speed: Math.PI / 2, phase: 0 };
+    // Moon is entity index 1 → column 1 → base float offset 16.
     const atT0 = packEntitiesToDataTexture(s, 0);
-    expect(atT0[1]).toBeCloseTo(0.5);  // moon column 1, pos.x
-    expect(atT0[2]).toBeCloseTo(0.0);
+    expect(atT0[17]).toBeCloseTo(0.5); // moon world.x
+    expect(atT0[18]).toBeCloseTo(0.0); // moon world.y
     const atQuarter = packEntitiesToDataTexture(s, 1); // theta = π/2
-    expect(atQuarter[1]).toBeCloseTo(0, 5);
-    expect(atQuarter[2]).toBeCloseTo(0.5);
+    expect(atQuarter[17]).toBeCloseTo(0, 5);
+    expect(atQuarter[18]).toBeCloseTo(0.5);
   });
 });
