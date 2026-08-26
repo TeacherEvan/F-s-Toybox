@@ -1,0 +1,11 @@
+# Security Audit — run-2026-08-26-m3
+
+Scope: full working-tree diff vs HEAD (index.html, tests/e2e/panel.spec.js, regenerated golden PNG).
+
+- Secret scan: `rg -ni -e 'api[_-]?key' -e 'secret' -e 'password' -e 'token' -e 'credential' --glob '!node_modules/**' --glob '!pnpm-lock.yaml' -l .` → 0 matches.
+- No credentials, no network calls beyond same-origin fetch of `./scene.json`.
+- localStorage writes are try/catch-guarded (kiosk-safe per design Risk #5); no secret values stored.
+- No destructive ops; no dependency changes.
+- New JS surface: module script imports local `src/scene.js`; no eval, no innerHTML of untrusted input (entity names escaped via esc()).
+
+Verdict: PASS — no CRITICAL/HIGH findings.

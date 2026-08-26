@@ -1,0 +1,11 @@
+{
+  "workflow_id": "surgical-impl-fstoybox",
+  "run_id": "run-2026-08-26-m3",
+  "plan": "docs/plans/2026-08-25-fs-toybox.md",
+  "status": "RUNNING",
+  "mode": "verify-and-execute-existing-plan",
+  "consistency_attempts": 0,
+  "verification_attempts": 0,
+  "milestones_done": ["M1", "M2"],
+  "current_objective": "M3 God Panel UI (no shaders)"
+}
