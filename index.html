@@ -1,15 +1,361 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><title>F's-Toybox</title></head>
+<head>
+<meta charset="utf-8">
+<title>F's-Toybox</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; overflow: hidden; background: #000;
+               font-family: ui-monospace, Menlo, Consolas, monospace; color: #cdd6e4; }
+  #gl { position: fixed; inset: 0; z-index: 0; display: block;
+        width: 100vw; height: 100vh; background: #000; }
+
+  /* ---- Top toolbar ---- */
+  #toolbar { position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+             display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+             padding: 6px 10px; background: rgba(8, 10, 18, 0.92);
+             border-bottom: 1px solid #223047; }
+  #toolbar button { background: #131a2a; color: #cdd6e4; border: 1px solid #2b3b57;
+                    border-radius: 4px; padding: 4px 9px; font: 12px inherit; cursor: pointer; }
+  #toolbar button:hover { background: #1d2740; }
+  .toolbar-spacer { flex: 1; }
+
+  /* ---- Left: entity list ---- */
+  #entity-list { position: fixed; top: 44px; left: 0; bottom: 26px; width: 224px;
+                 z-index: 10; background: rgba(8, 10, 18, 0.88);
+                 border-right: 1px solid #223047; overflow-y: auto; padding: 8px; }
+  #entity-list h3 { margin: 0 0 6px 0; font-size: 11px; letter-spacing: 1px;
+                    color: #7f93b5; font-weight: normal; }
+  .entity-list-item { display: flex; align-items: center; gap: 6px; padding: 4px 6px;
+                      border-radius: 4px; cursor: pointer; font-size: 12px;
+                      white-space: nowrap; overflow: hidden; }
+  .entity-list-item:hover { background: #16203a; }
+  .entity-list-item.selected { background: #23345c; outline: 1px solid #3b5aa0; }
+  .entity-list-item .eye { cursor: pointer; color: #8fb0ff; }
+  .entity-list-item.hidden-entity .item-name { opacity: 0.45; }
+
+  /* ---- Right: property editor (exactly 320px — Risk #9) ---- */
+  #property-editor { position: fixed; top: 44px; right: 0; bottom: 26px; width: 320px;
+                     z-index: 10; background: rgba(8, 10, 18, 0.92);
+                     border-left: 1px solid #223047; overflow-y: auto; padding: 12px; }
+  .property-editor h2 { margin: 0 0 10px 0; font-size: 13px; color: #e8eefc;
+                        font-weight: normal; }
+  #property-editor section { margin-bottom: 12px; border-top: 1px solid #223047;
+                             padding-top: 8px; }
+  #property-editor h3 { margin: 0 0 6px 0; font-size: 11px; letter-spacing: 1px;
+                        color: #7f93b5; font-weight: normal; }
+  .prop-row { display: grid; grid-template-columns: 86px 1fr 52px; gap: 6px;
+              align-items: center; font-size: 11px; margin-bottom: 4px; }
+  .prop-row output { text-align: right; color: #9fc0ff; }
+  .prop-row input[type="range"] { width: 100%; accent-color: #6f8fff; }
+  .editor-empty-hint { color: #66738f; font-size: 12px; }
+  .danger-row { display: flex; gap: 8px; }
+  .danger-row button { flex: 1; background: #2a1520; color: #ffb3c0; border: 1px solid #5c2b3b;
+                       border-radius: 4px; padding: 5px 0; font: 12px inherit; cursor: pointer; }
+  .danger-row button[data-action="duplicate"] { background: #14261a; color: #a9e8b8;
+                                                border-color: #2b5c3b; }
+
+  /* ---- Bottom strip + status ---- */
+  #bottom-strip { position: fixed; bottom: 0; left: 0; right: 0; height: 24px; z-index: 10;
+                  display: flex; align-items: center; gap: 14px; padding: 0 10px;
+                  background: rgba(8, 10, 18, 0.92); border-top: 1px solid #223047;
+                  font-size: 11px; color: #7f93b5; cursor: pointer; }
+  #status { position: fixed; left: 236px; bottom: 4px; z-index: 30;
+            color: #8c8; font-size: 11px; }
+  #status.err { color: #f88; }
+</style>
+</head>
 <body>
-<canvas id="gl" style="display:block;width:100vw;height:100vh;background:#000"></canvas>
-<div id="status" style="position:fixed;left:12px;bottom:12px;color:#8c8;font:11px monospace">boot…</div>
+<canvas id="gl"></canvas>
+
+<div id="toolbar">
+  <button data-add="galaxy">+ Galaxy</button>
+  <button data-add="planet">+ Planet</button>
+  <button data-add="moon">+ Moon</button>
+  <button data-add="ring">+ Ring</button>
+  <button data-add="shootingStar">+ Shooting</button>
+  <button data-add="blackHole">+ BHole</button>
+  <button data-add="nebula">+ Nebula</button>
+  <button data-add="comet">+ Comet</button>
+  <span class="toolbar-spacer"></span>
+  <button id="hide-all-btn">☰ Hide All</button>
+  <button id="pause-btn">⏸ Pause</button>
+  <button id="save-btn">💾 Save</button>
+  <button id="load-btn">⤓ Load</button>
+</div>
+
+<div id="entity-list">
+  <h3>ENTITIES (<span id="entity-count">0</span>)</h3>
+  <div id="entity-items"></div>
+</div>
+
+<div id="property-editor" class="property-editor">
+  <p class="editor-empty-hint">Click an entity to edit,<br>or add one above.</p>
+</div>
+
+<div id="bottom-strip" title="Click to reset camera">cam (0.00, 0.00) · zoom 1.00</div>
+<div id="status">boot…</div>
+
 <script>
-window.addEventListener('error', (e) => {
-  document.getElementById('status').textContent = 'ERR: ' + e.message;
-  document.getElementById('status').style.color = '#f88';
+  window.addEventListener('error', (e) => {
+    const el = document.getElementById('status');
+    el.textContent = 'ERR: ' + e.message;
+    el.classList.add('err');
+  });
+</script>
+
+<script type="module">
+import { Scene, createEntity, serialize, deserialize } from './src/scene.js';
+
+const KIND_LABELS = {
+  galaxy: 'Galaxy', planet: 'Planet', moon: 'Moon',
+  shootingStar: 'Shooting Star', blackHole: 'Black Hole',
+  ring: 'Ring', nebula: 'Nebula', comet: 'Comet',
+};
+
+const state = { selectedId: null };
+let scene = null;
+
+/* ---------- helpers ---------- */
+
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+function getProp(obj, path) {
+  return path.split('.').reduce((o, k) => (o == null ? undefined : o[k]), obj);
+}
+
+function setProp(obj, path, value) {
+  const keys = path.split('.');
+  const last = keys.pop();
+  const target = keys.reduce((o, k) => o[k], obj);
+  target[last] = value;
+}
+
+function fmtVal(v) {
+  if (typeof v === 'boolean') return v ? 'on' : 'off';
+  if (typeof v !== 'number') return String(v);
+  return Math.abs(v) >= 100 ? String(Math.round(v)) : v.toFixed(2);
+}
+
+function rangeFor(path, value) {
+  const key = path.split('.').pop();
+  if (path === 'position.x' || path === 'position.y') return { min: -1, max: 1, step: 0.01 };
+  if (path === 'scale') return { min: 0, max: 5, step: 0.01 };
+  if (path === 'rotation') return { min: -6.283, max: 6.283, step: 0.01 };
+  if (key === 'h') return { min: 0, max: 360, step: 1 };
+  if (Number.isInteger(value)) {
+    return Math.abs(value) > 6
+      ? { min: 0, max: 512, step: 1 }
+      : { min: 0, max: 6, step: 1 };
+  }
+  if (value >= 0 && value <= 1) return { min: 0, max: 1, step: 0.01 };
+  return { min: 0, max: Math.max(5, Math.ceil(value * 2)), step: 0.01 };
+}
+
+/* ---------- autosave (debounced; kiosk-safe) ---------- */
+
+let autosaveTimer = null;
+function scheduleAutosave() {
+  clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(() => {
+    try {
+      localStorage.setItem('mad.scene', serialize(scene));
+    } catch (err) {
+      console.warn('localStorage unavailable; autosave skipped:', err.message);
+    }
+  }, 200);
+}
+
+/* ---------- rendering ---------- */
+
+function selectedEntity() {
+  return scene.entities.find((e) => e.id === state.selectedId) || null;
+}
+
+function renderEntityList() {
+  document.getElementById('entity-count').textContent = String(scene.entities.length);
+  const host = document.getElementById('entity-items');
+  host.innerHTML = scene.entities.map((e) => `
+    <div class="entity-list-item${e.id === state.selectedId ? ' selected' : ''}${e.visible ? '' : ' hidden-entity'}"
+         draggable="true" data-id="${e.id}">
+      <span class="eye" title="Toggle visibility">${e.visible ? '▣' : '▢'}</span>
+      <span class="item-name">${esc(e.name)} · (${e.position.x.toFixed(2)}, ${e.position.y.toFixed(2)})</span>
+    </div>`).join('');
+}
+
+function propRow(label, path, value) {
+  const r = rangeFor(path, typeof value === 'boolean' ? 0 : value);
+  if (typeof value === 'boolean') {
+    return `<label class="prop-row"><span>${esc(label)}</span>
+      <input type="checkbox" data-prop="${path}" ${value ? 'checked' : ''}>
+      <output>${value ? 'on' : 'off'}</output></label>`;
+  }
+  return `<label class="prop-row"><span>${esc(label)}</span>
+    <input type="range" data-prop="${path}" min="${r.min}" max="${r.max}" step="${r.step}" value="${value}">
+    <output>${fmtVal(value)}</output></label>`;
+}
+
+function renderPropertyEditor() {
+  const host = document.getElementById('property-editor');
+  const e = selectedEntity();
+  if (!e) {
+    host.innerHTML = '<p class="editor-empty-hint">Click an entity to edit,<br>or add one above.</p>';
+    return;
+  }
+  const label = KIND_LABELS[e.kind] || e.kind;
+  const motionRows = Object.keys(e.motion).map((k) => propRow(k, `motion.${k}`, e.motion[k])).join('');
+  const renderRows = Object.keys(e.render).map((k) => propRow(k, `render.${k}`, e.render[k])).join('');
+  host.innerHTML = `
+    <h2>SELECTED · ${esc(label)} "${esc(e.name)}"</h2>
+    <section>
+      <h3>VISIBILITY</h3>
+      ${propRow('visible', 'visible', e.visible)}
+    </section>
+    <section>
+      <h3>TRANSFORM</h3>
+      ${propRow('pos.x', 'position.x', e.position.x)}
+      ${propRow('pos.y', 'position.y', e.position.y)}
+      ${propRow('scale', 'scale', e.scale)}
+      ${propRow('rot', 'rotation', e.rotation)}
+    </section>
+    ${motionRows ? `<section><h3>MOTION</h3>${motionRows}</section>` : ''}
+    ${renderRows ? `<section><h3>RENDER</h3>${renderRows}</section>` : ''}
+    <section>
+      <h3>COLOR</h3>
+      ${propRow('hue', 'color.h', e.color.h)}
+      ${propRow('sat', 'color.s', e.color.s)}
+      ${propRow('bright', 'color.b', e.color.b)}
+    </section>
+    <section>
+      <h3>DANGER</h3>
+      <div class="danger-row">
+        <button data-action="duplicate">Duplicate</button>
+        <button data-action="delete">Delete</button>
+      </div>
+    </section>`;
+}
+
+function renderAll() {
+  renderEntityList();
+  renderPropertyEditor();
+}
+
+/* ---------- events ---------- */
+
+document.getElementById('toolbar').addEventListener('click', (ev) => {
+  const btn = ev.target.closest('[data-add]');
+  if (!btn) return;
+  if (scene.entities.length >= 64) { alert('Scene too dense (max 64 entities).'); return; }
+  const e = createEntity(btn.dataset.add);
+  scene.addEntity(e);
+  state.selectedId = e.id;
+  renderAll();
+  scheduleAutosave();
 });
-document.getElementById('status').textContent = 'ready';
+
+document.getElementById('entity-items').addEventListener('click', (ev) => {
+  const item = ev.target.closest('.entity-list-item');
+  if (!item) return;
+  const e = scene.entities.find((x) => x.id === item.dataset.id);
+  if (!e) return;
+  if (ev.target.classList.contains('eye')) {
+    e.visible = !e.visible;
+    scheduleAutosave();
+    renderAll();
+    return;
+  }
+  state.selectedId = e.id;
+  renderAll();
+});
+
+/* Drag-to-reorder (z paint order) */
+let dragSrcId = null;
+document.getElementById('entity-items').addEventListener('dragstart', (ev) => {
+  const item = ev.target.closest('.entity-list-item');
+  if (!item) return;
+  dragSrcId = item.dataset.id;
+  ev.dataTransfer.effectAllowed = 'move';
+});
+document.getElementById('entity-items').addEventListener('dragover', (ev) => {
+  ev.preventDefault();
+});
+document.getElementById('entity-items').addEventListener('drop', (ev) => {
+  ev.preventDefault();
+  const item = ev.target.closest('.entity-list-item');
+  if (!item || !dragSrcId || item.dataset.id === dragSrcId) return;
+  const fromIdx = scene.entities.findIndex((x) => x.id === dragSrcId);
+  const toIdx = scene.entities.findIndex((x) => x.id === item.dataset.id);
+  if (fromIdx < 0 || toIdx < 0) return;
+  const [moved] = scene.entities.splice(fromIdx, 1);
+  scene.entities.splice(toIdx, 0, moved);
+  dragSrcId = null;
+  renderAll();
+  scheduleAutosave();
+});
+
+document.getElementById('property-editor').addEventListener('input', (ev) => {
+  const t = ev.target;
+  const path = t.dataset.prop;
+  const e = selectedEntity();
+  if (!path || !e) return;
+  const value = t.type === 'checkbox' ? t.checked : Number(t.value);
+  setProp(e, path, value);
+  const out = t.closest('.prop-row')?.querySelector('output');
+  if (out) out.textContent = fmtVal(value);
+  renderEntityList();
+  scheduleAutosave();
+});
+
+document.getElementById('property-editor').addEventListener('click', (ev) => {
+  const btn = ev.target.closest('[data-action]');
+  if (!btn) return;
+  const e = selectedEntity();
+  if (!e) return;
+  if (btn.dataset.action === 'delete') {
+    scene.removeEntity(e.id);
+    state.selectedId = null;
+    renderAll();
+    scheduleAutosave();
+  } else if (btn.dataset.action === 'duplicate') {
+    const dup = structuredClone(e);
+    dup.id = globalThis.crypto.randomUUID();
+    dup.name = `${e.name} copy`;
+    dup.position = { x: e.position.x + 0.05, y: e.position.y + 0.05 };
+    scene.addEntity(dup);
+    state.selectedId = dup.id;
+    renderAll();
+    scheduleAutosave();
+  }
+});
+
+/* Inert until their milestones wire them up (M10). Present per AC #6. */
+for (const id of ['hide-all-btn', 'pause-btn', 'save-btn', 'load-btn']) {
+  document.getElementById(id).addEventListener('click', () => {});
+}
+
+document.getElementById('bottom-strip').addEventListener('click', () => {});
+
+/* ---------- boot ---------- */
+
+async function boot() {
+  try {
+    const res = await fetch('./scene.json', { cache: 'no-store' });
+    const loaded = deserialize(await res.text());
+    scene = Object.assign(new Scene(), loaded);
+  } catch (err) {
+    console.warn('scene.json load failed; starting empty:', err.message);
+    scene = new Scene();
+  }
+  window.scene = scene;
+  window.createEntity = createEntity;
+  renderAll();
+  document.getElementById('status').textContent = 'ready';
+}
+
+boot();
 </script>
 </body>
 </html>
