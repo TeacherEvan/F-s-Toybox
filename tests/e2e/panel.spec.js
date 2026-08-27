@@ -3,16 +3,19 @@ import { test, expect } from '@playwright/test';
 // M3.2 gate spec — God Panel UI (no shaders).
 // Source: docs/plans/2026-08-25-fs-toybox.md Task 3.2 Step 2.
 // Use ?seed=42&t=0 to freeze the render loop and avoid SwiftShader slowdown.
+test.setTimeout(90_000);
 
 test('add galaxy, select, edit position', async ({ page }) => {
   await page.goto('/index.html?seed=42&t=0');
+  await expect(page.locator('#status')).toHaveText('ready');
   await page.getByRole('button', { name: '+ Galaxy' }).click();
   await expect(page.locator('.entity-list-item')).toHaveCount(1);
   await expect(page.locator('.property-editor h2')).toContainText('Galaxy');
   const xSlider = page.locator('input[data-prop="position.x"]');
-  await xSlider.fill('0.42');
-  // Wait for the list to re-render with the updated position
-  // innerText() on the first item auto-retries on detached elements
+  await xSlider.evaluate((el) => {
+    el.value = '0.42';
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  });
   await expect(page.locator('.entity-list-item').first()).toContainText('0.42', { timeout: 5000 });
 });
 

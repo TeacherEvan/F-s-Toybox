@@ -107,20 +107,21 @@ test('M5: galaxy frame differs from the empty-scene frame (>=1% pixels)', async 
   await page.waitForFunction(() => window.__readLuma !== undefined && window.scene !== undefined);
   await page.waitForTimeout(200);
   await sync(page);
-  const before = await page.evaluate(() => Array.from(window.__readLuma(0, 0, 1280, 720)));
-  const d0 = await draws(page);
-
-  await page.evaluate(() => {
-    const e = createEntity('galaxy');
+  const diffRatio = await page.evaluate(async () => {
+    const before = window.__readLuma(0, 0, 1280, 720);
+    const e = window.createEntity('galaxy');
     e.position = { x: 0.3, y: 0.2 };
-    scene.addEntity(e);
+    window.scene.addEntity(e);
+    // Force reupload / draw
+    if (window.__reupload) window.__reupload();
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const after = window.__readLuma(0, 0, 1280, 720);
+    let diff = 0;
+    for (let i = 0; i < before.length; i++) {
+      if (Math.abs(before[i] - after[i]) > 0.02) diff++;
+    }
+    return diff / before.length;
   });
-  await waitDraw(page, d0);
-  const after = await page.evaluate(() => Array.from(window.__readLuma(0, 0, 1280, 720)));
 
-  let diff = 0;
-  for (let i = 0; i < before.length; i++) {
-    if (Math.abs(before[i] - after[i]) > 0.02) diff++;
-  }
-  expect(diff / before.length).toBeGreaterThanOrEqual(0.01);
+  expect(diffRatio).toBeGreaterThanOrEqual(0.01);
 });

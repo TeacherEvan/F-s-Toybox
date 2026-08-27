@@ -115,7 +115,9 @@ const KIND_LABELS = {
 };
 
 const state = { selectedId: null };
-let scene = null;
+let scene = new Scene();
+window.scene = scene;
+window.createEntity = createEntity;
 
 /* ---------- helpers ---------- */
 
@@ -619,11 +621,11 @@ void main() {
         } else {
             rr = length(local) / max(e.scale, 0.01);
             if (e.kind == 2) {
-                if (rr < 0.35) col += hsv2rgb(vec3(e.color.x/360.0, e.color.y, e.color.z)) * exp(-rr*rr*2.5) * 0.9 * e.scale;
+                if (rr < 0.35) col += hsv2rgb(vec3(e.color.x, e.color.y, e.color.z)) * exp(-rr*rr*2.5) * 0.9 * e.scale;
             } else if (e.kind == 7) {
-                if (rr < 0.6) col += hsv2rgb(vec3(e.color.x/360.0, e.color.y*0.6, e.color.z)) * (0.4 - rr*0.4) * fbm(local*3.0 + iTime*0.05);
+                if (rr < 0.6) col += hsv2rgb(vec3(e.color.x, e.color.y*0.6, e.color.z)) * (0.4 - rr*0.4) * fbm(local*3.0 + iTime*0.05);
             } else {
-                if (rr < 0.08) col += hsv2rgb(vec3(e.color.x/360.0, e.color.y, e.color.z)) * e.scale;
+                if (rr < 0.08) col += hsv2rgb(vec3(e.color.x, e.color.y, e.color.z)) * e.scale;
             }
         }
         continue;
@@ -842,8 +844,10 @@ let lastNow = performance.now();
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     lastDrawTime = now;
-  requestAnimationFrame(frame);
   }
+
+  requestAnimationFrame(frame);
+}
 
 document.getElementById('bottom-strip').addEventListener('click', () => {
   camYaw = 0; camPitch = 0;
@@ -858,13 +862,13 @@ async function boot() {
   try {
     const res = await fetch('./scene.json', { cache: 'no-store' });
     const loaded = deserialize(await res.text());
-    scene = Object.assign(new Scene(), loaded);
+    if (scene.entities.length === 0) {
+      scene = Object.assign(new Scene(), loaded);
+      window.scene = scene;
+    }
   } catch (err) {
     console.warn('scene.json load failed; starting empty:', err.message);
-    scene = new Scene();
   }
-  window.scene = scene;
-  window.createEntity = createEntity;
   renderAll();
   updateBottomStrip();
   document.getElementById('status').textContent = 'ready';
