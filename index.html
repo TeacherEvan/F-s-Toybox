@@ -775,12 +775,43 @@ function startEngine(gl) {
   resize();
 
   /* Camera: plain drag = tilt/rotate, wheel = zoom (design §4.3). */
-  let dragging = false, lastX = 0, lastY = 0;
+  let dragging = false, lastX = 0, lastY = 0, clickX = 0, clickY = 0;
+  const PICK_DIST_PX = 6; // max pointer movement to treat as "click" not drag
   canvas.addEventListener('pointerdown', (e) => {
     dragging = true; lastX = e.clientX; lastY = e.clientY;
+    clickX = e.clientX; clickY = e.clientY;
     canvas.setPointerCapture(e.pointerId);
   });
-  canvas.addEventListener('pointerup', () => { dragging = false; });
+  canvas.addEventListener('pointerup', () => {
+    // If pointer barely moved, treat as a click-to-select nearest entity.
+    const dx = clickX - lastX, dy = clickY - lastY;
+    if (!dragging ? false : Math.abs(dx) < PICK_DIST_PX && Math.abs(dy) < PICK_DIST_PX) {
+      const rect = canvas.getBoundingClientRect();
+      const mx = clickX - rect.left, my = clickY - rect.top;
+      const uv0 = {
+        x: ((mx / rect.width) - 0.5) * 2 * scene.camera.zoom,
+        y: ((my / rect.height) - 0.5) * 2 * scene.camera.zoom,
+      };
+      let bestId = null, bestD = 1e9;
+      const t = FROZEN_T !== null ? FROZEN_T : elapsed;
+      for (const e of scene.entities) {
+        if (e.visible === false) continue;
+        const w = (typeof resolveWorldPosition === 'function')
+          ? resolveWorldPosition(e, scene, t)
+          : e.position;
+        const dxw = uv0.x - w.x, dyw = uv0.y - w.y;
+        const thresh = Math.max(0.03, e.scale * 0.25);
+        const d = Math.sqrt(dxw*dxw + dyw*dyw);
+        if (d < thresh && d < bestD) { bestD = d; bestId = e.id; }
+      }
+      if (bestId !== null && bestId !== state.selectedId) {
+        state.selectedId = bestId;
+        renderAll();
+        updateBottomStrip();
+      }
+    }
+    dragging = false;
+  });
   canvas.addEventListener('pointercancel', () => { dragging = false; });
   canvas.addEventListener('pointermove', (e) => {
     if (!dragging) return;

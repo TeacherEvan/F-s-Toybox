@@ -4,3 +4,8 @@
 playwright-report/
 test-results/
 node_modules/
+# Code-review skill advisory artifacts (not project source — never commit)
+audit_report.md
+review_findings.md
+fix_summary.md
+investigation_report.md
