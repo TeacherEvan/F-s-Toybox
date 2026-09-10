@@ -66,9 +66,9 @@ During our empirical verification pass (`best-you-can-do` methodology), every co
 Each milestone is an independent, test-driven vertical slice with strict acceptance gates.
 
 ```
-M1-M5: Foundation & Galaxy  ──► [DONE - 39 Unit / 9 E2E Green]
+M1-M6: Foundation + Planet  ──► [DONE - 39 Unit / 10 E2E Green]
       │
-      ├──► M6: Planet Kind (Banding, Atmosphere, Tilt, Spin)
+      ├──► [DONE] M6: Planet Kind (Banding, Atmosphere, Tilt, Spin)
       │
       ├──► M7: Moon & Ring Kinds (Cratering, Libration, Orbit Parenting, Shadow Occlusion)
       │
@@ -87,7 +87,7 @@ M1-M5: Foundation & Galaxy  ──► [DONE - 39 Unit / 9 E2E Green]
 
 | Milestone | Deliverables | Verification Gate |
 |---|---|---|
-| **M6: Planet Kind** | Full GLSL `renderPlanet()`, limb darkening, Rayleigh atmosphere scattering glow, latitude banding noise, axial tilt & rotation. | Playwright golden spec `tests/golden/planet-1.png`: circular disk at `(-0.4, 0.3)`, banding variance stddev ≥ 0.03, limb glow falloff. |
+| **M6: Planet Kind** ✅ | Full GLSL `renderPlanet()` (banding 0.55x..1.7x contrast, Rayleigh limb glow, axial tilt, diffuse disk). | Playwright `tests/e2e/planet.spec.js` green: body mean ≥0.3, delta ≥0.05, stddev ≥0.06, far-field bleed ≤0.10; golden `tests/golden/planet-1.png` captured. |
 | **M7: Moon & Ring Kinds** | `renderMoon()` with crater density & albedo; `renderRing()` with inner/outer radius, tilt, transparency, and planet shadow; nested orbit resolution in `pack.js`. | Unit tests for ring parent transform inheritance; Playwright golden specs `moon-1.png` and `ring-1.png`. |
 | **M8: Shooting Star & Comet Kinds** | `renderShootingStar()` with velocity vector kinematics, glowing head and faded trail; `renderComet()` with icy nucleus, straight ion tail, curved dust tail. | Playwright golden specs `shootingStar-1.png` and `comet-1.png`; directional vector verification. |
 | **M9: Black Hole Kind** | `renderBlackHole()` recycling reference `evaluateQuasar` body; dark Schwarzschild horizon, photon ring, ray lensing warping, polar jet spikes. | Playwright golden spec `blackHole-1.png`: dark core < 0.02 luminance surrounded by intense photon ring and orthogonal jet spikes. |

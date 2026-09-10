@@ -567,6 +567,48 @@ void renderGalaxy(Entity e, vec2 uv, float time, inout vec3 col) {
     col = mix(col, field, coverage);
 }
 
+// M6 - planet kind (design 6.1, golden-specs "planet golden spec").
+// Slots (design 3.5):
+//   motion: spin(p0) wobble(p1) tilt(p2) bandingSpeed(p3)
+//   render: radius(r0) banding(r1) atmosphere(r2) unused(r3=0)
+// uv arrives LOCAL (fragUV - e.pos). Effective intrinsic angle =
+// baseRotation + t*spin; scale divides local coords (design 3.4).
+void renderPlanet(Entity e, vec2 uv, float time, inout vec3 col) {
+    vec2 suv = uv / max(e.scale, 0.01);
+    float rad = max(e.render.x, 0.01);
+    float d = length(suv);
+    if (d > rad * 2.5) return; // cull beyond atmosphere glow reach
+
+    // Axial tilt rotation (tilt = e.motion.z, per design 6.1).
+    vec2 pUV = rotate2D(e.baseRotation + e.motion.z) * suv;
+
+    if (d < rad) {
+        float normY = pUV.y / rad;
+        float bandNoise = fbm(vec2(normY * 12.0, time * e.motion.w * 0.1));
+        float bands = sin(normY * 20.0 + bandNoise * 4.0 * e.render.y);
+        float diffuse = sqrt(max(0.0, 1.0 - (d * d) / (rad * rad)));
+
+        vec3 baseCol = hsv2rgb(vec3(e.color.x, e.color.y, e.color.z));
+        // Wide band contrast: 0.55x..1.7x of base. ACES crushes brights, so a
+        // narrow 0.7..1.3 mix reads as a flat disk (measured stddev 0.043 vs
+        // the >=0.06 golden-spec floor). Bumps are the whole point of the kind.
+        vec3 bandCol = mix(baseCol * 0.55, baseCol * 1.7, bands * 0.5 + 0.5);
+        vec3 surface = bandCol * diffuse;
+
+        // Atmospheric limb edge glow (Rayleigh-ish, design 6.1).
+        float limb = pow(1.0 - diffuse, 3.0) * e.render.z;
+        surface += vec3(0.6, 0.8, 1.0) * limb;
+
+        col = mix(col, surface, smoothstep(rad, rad - 0.005, d));
+    } else if (e.render.z > 0.0) {
+        // Atmospheric outer haze beyond the disk.
+        float haze = exp(-(d - rad) * 25.0 / max(e.render.z, 0.01));
+        vec3 hazeCol = mix(hsv2rgb(vec3(e.color.x, e.color.y * 0.5, 1.0)),
+                           vec3(0.5, 0.8, 1.0), 0.5);
+        col += hazeCol * haze * 0.6 * e.render.z;
+    }
+}
+
 vec3 aces(vec3 x) {
     const float a = 2.51, b = 0.03, c = 2.43, d = 0.59, e = 0.14;
     return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
@@ -602,13 +644,12 @@ void main() {
         if (e.kind <= 0) continue; // 0 = unused slot; < 0 = hidden (sign-packed)
         vec2 local = uv - e.pos;
         if (e.kind == 1) { renderGalaxy(e, local, iTime, col); continue; } // GALAXY (kind=1)
-        // Kinds 2..8 (PLANET=2, MOON=3, RING=4, SHOOTING_STAR=5, BLACK_HOLE=6,
-        // NEBULA=7, COMET=8) — M5 implemented galaxy; M6+ adds per-kind shaders.
-        // For now: render a minimal visible marker per kind (not white/blank).
-        // Black hole (6) → dark core + faint ring; planet (2) → tinted disk.
-        // Per-kind markers (M5=M6 transitional): blackHole=dark horizon+spikes+jets;
-        // planet=tinted disk; nebula=soft cloud; others=minimal disk.
-        float rr, r = 0.0;
+        if (e.kind == 2) { renderPlanet(e, local, iTime, col); continue; } // PLANET (kind=2, M6)
+        // Kinds 3..8 (MOON=3, RING=4, SHOOTING_STAR=5, BLACK_HOLE=6,
+        // NEBULA=7, COMET=8) — M6 implemented galaxy+planet; M7+ adds per-kind
+        // shaders. Until then: minimal visible marker per kind (not white/blank).
+        // Black hole (6) → dark horizon + spikes + jets; nebula (7) → soft cloud.
+        float rr = length(local) / max(e.scale, 0.01);
         if (e.kind == 6) {
             rr = length(local) / max(e.scale * max(e.render.x, 0.01), 0.001);
             float spikeSharp = clamp(e.render.z, 0.01, 1.0);
@@ -618,15 +659,10 @@ void main() {
             col += vec3(0.01, 0.015, 0.02) * exp(-rr*rr*120.0) * 0.04;
             col += vec3(0.85, 0.82, 0.95) * cross * 0.35;
             col += vec3(0.9, 0.88, 1.0) * vertical * 0.6;
+        } else if (e.kind == 7) {
+            if (rr < 0.6) col += hsv2rgb(vec3(e.color.x, e.color.y*0.6, e.color.z)) * (0.4 - rr*0.4) * fbm(local*3.0 + iTime*0.05);
         } else {
-            rr = length(local) / max(e.scale, 0.01);
-            if (e.kind == 2) {
-                if (rr < 0.35) col += hsv2rgb(vec3(e.color.x, e.color.y, e.color.z)) * exp(-rr*rr*2.5) * 0.9 * e.scale;
-            } else if (e.kind == 7) {
-                if (rr < 0.6) col += hsv2rgb(vec3(e.color.x, e.color.y*0.6, e.color.z)) * (0.4 - rr*0.4) * fbm(local*3.0 + iTime*0.05);
-            } else {
-                if (rr < 0.08) col += hsv2rgb(vec3(e.color.x, e.color.y, e.color.z)) * e.scale;
-            }
+            if (rr < 0.08) col += hsv2rgb(vec3(e.color.x, e.color.y, e.color.z)) * e.scale;
         }
         continue;
     }

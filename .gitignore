@@ -9,3 +9,6 @@ audit_report.md
 review_findings.md
 fix_summary.md
 investigation_report.md
+
+# V2 audit scratch dir (run output, never commit)
+docs/.scratch-audit/
