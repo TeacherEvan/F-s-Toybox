@@ -135,3 +135,15 @@ derived from the structural signals above — they name concrete extractions
   its next tick.
 - implementer: `cron_surgical_impl.py` will pick this plan up once the reviewer
   marks it `READY` or `READY-WITH-WARNINGS`.
+
+
+## REVIEW 2026-09-11T09:56:50.626078+07:00
+
+**Verdict:** `NEEDS-REVISION`
+
+**Structural check:** objectives=12 file_header=✓ imports=✓ why=✓ dod=✓ security=✓
+
+**Gaps:**
+1. **OBJ-003–OBJ-012 are 10 identical copy-pasted "hardening pass" objectives** — same target, acceptance, validation, and evidence text, only the number changes. This is generic N-slice filler, contradicting the plan's own "v2 — file-aware, NOT a generic N-slice filler" claim.
+2. **Zero concrete extraction targets.** The plan says `src/scene.js` will be split or shrink materially, but it never names which functions to extract, which target modules to create, or any line-anchored extraction beyond restating the existing exports list. A refactor plan without extraction targets is not a plan.
+3. **Structural check contradicts the plan body.** The check reports `objectives=0, has_header=None, has_imports=None, has_why=None, has_dod=None, has_security=None`, yet the plan contains 12 objectives, a header table, import sample, "Why this file matters", DoD, and Security notes. The structural analysis is either stale or broken, which undermines the provenance claim that objectives were "derived from structural analysis."

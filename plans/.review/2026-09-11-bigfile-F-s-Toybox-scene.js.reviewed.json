@@ -1,0 +1,11 @@
+{
+  "plan": "2026-09-11-bigfile-F-s-Toybox-scene.js.md",
+  "verdict": "NEEDS-REVISION",
+  "ready_for_impl": false,
+  "gaps": [
+    "**OBJ-003\u2013OBJ-012 are 10 identical copy-pasted \"hardening pass\" objectives** \u2014 same target, acceptance, validation, and evidence text, only the number changes. This is generic N-slice filler, contradicting the plan's own \"v2 \u2014 file-aware, NOT a generic N-slice filler\" claim.",
+    "**Zero concrete extraction targets.** The plan says `src/scene.js` will be split or shrink materially, but it never names which functions to extract, which target modules to create, or any line-anchored extraction beyond restating the existing exports list. A refactor plan without extraction targets is not a plan.",
+    "**Structural check contradicts the plan body.** The check reports `objectives=0, has_header=None, has_imports=None, has_why=None, has_dod=None, has_security=None`, yet the plan contains 12 objectives, a header table, import sample, \"Why this file matters\", DoD, and Security notes. The structural analysis is either stale or broken, which undermines the provenance claim that objectives were \"derived from structural analysis.\""
+  ],
+  "reviewed_at": "2026-09-11T09:56:50.626722+07:00"
+}
