@@ -1,0 +1,11 @@
+{
+  "plan": "2026-09-12-bigfile-F-s-Toybox-scene.js.md",
+  "verdict": "NEEDS-REVISION",
+  "ready_for_impl": false,
+  "gaps": [
+    "**OBJ-003\u2013OBJ-012 are copy-paste filler.** Ten of twelve objectives are identical \"Hardening pass N\" entries with no concrete targets, no line/symbol anchoring, no distinct scope \u2014 directly contradicting the plan's own claim of \"file-aware objectives derived from structural analysis.\"",
+    "**No extraction/split plan exists.** The DOD asserts `src/scene.js` will \"disappear (split into smaller modules) or shrink materially,\" but no target modules, symbol assignments, or split boundaries are defined. There is nothing to implement.",
+    "**Per-objective DOD entries are missing.** The DOD checklist requires a Definition-of-Done entry under each OBJ-00X \"filled in by the IMPLEMENT pass\" \u2014 none are present. The structural checker also reports `objectives=0`, `has_dod=None`, confirming the objectives block failed to parse as tickable."
+  ],
+  "reviewed_at": "2026-09-12T17:06:33.845077+07:00"
+}

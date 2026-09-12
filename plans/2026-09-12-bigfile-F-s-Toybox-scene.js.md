@@ -135,3 +135,15 @@ derived from the structural signals above — they name concrete extractions
   its next tick.
 - implementer: `cron_surgical_impl.py` will pick this plan up once the reviewer
   marks it `READY` or `READY-WITH-WARNINGS`.
+
+
+## REVIEW 2026-09-12T17:06:33.843633+07:00
+
+**Verdict:** `NEEDS-REVISION`
+
+**Structural check:** objectives=12 file_header=✓ imports=✓ why=✓ dod=✓ security=✓
+
+**Gaps:**
+1. **OBJ-003–OBJ-012 are copy-paste filler.** Ten of twelve objectives are identical "Hardening pass N" entries with no concrete targets, no line/symbol anchoring, no distinct scope — directly contradicting the plan's own claim of "file-aware objectives derived from structural analysis."
+2. **No extraction/split plan exists.** The DOD asserts `src/scene.js` will "disappear (split into smaller modules) or shrink materially," but no target modules, symbol assignments, or split boundaries are defined. There is nothing to implement.
+3. **Per-objective DOD entries are missing.** The DOD checklist requires a Definition-of-Done entry under each OBJ-00X "filled in by the IMPLEMENT pass" — none are present. The structural checker also reports `objectives=0`, `has_dod=None`, confirming the objectives block failed to parse as tickable.
