@@ -16,6 +16,8 @@ test('add galaxy, select, edit position', async ({ page }) => {
     el.value = '0.42';
     el.dispatchEvent(new Event('input', { bubbles: true }));
   });
+  // Expect the entity list item to show the edited x coordinate (poll, since
+  // the main thread can be saturated by the WebGL loop).
   await expect(page.locator('.entity-list-item').first()).toContainText('0.42', { timeout: 5000 });
 });
 

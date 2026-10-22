@@ -1,12 +1,22 @@
 // F's-Toybox scene model — M2.
-export const ENTITY_KINDS = ['galaxy','planet','moon','ring','shootingStar','blackHole','nebula','comet'];
+//
+// Loaded as a CLASSIC script (not an ES module) so the app also works when
+// index.html is opened straight from disk (file://) — the documented
+// wallpaper deployment. ES module imports of local files are CORS-blocked on
+// the opaque file:// origin, which killed the whole module script: no event
+// handlers, no WebGL engine, and the "+ Add" buttons did nothing.
+// Vitest imports the ESM facade in src/index.js instead (see that file).
+(function (root) {
+'use strict';
+
+const ENTITY_KINDS = ['galaxy','planet','moon','ring','shootingStar','blackHole','nebula','comet'];
 
 // The order in the array is significant: it's the order in which
 // +Add buttons appear in the God Panel toolbar (M3.1). Keep stable.
 
 // GLSL-side kind enum (design §3.1). Kind 0 is reserved for "unused slot";
 // the packer sign-encodes visibility into the same int (negative = hidden).
-export const KIND_GPU = {
+const KIND_GPU = {
   UNUSED:        0,
   GALAXY:        1,
   PLANET:        2,
@@ -58,7 +68,7 @@ function defaultName(kind) {
   return names[kind];
 }
 
-export function createEntity(kind) {
+function createEntity(kind) {
   if (!ENTITY_KINDS.includes(kind)) throw new Error(`Unknown kind: ${kind}`);
   return {
     id: uuid(),
@@ -75,7 +85,7 @@ export function createEntity(kind) {
   };
 }
 
-export class Scene {
+class Scene {
   constructor() {
     this.entities = [];
     this.camera = { x: 0, y: 0, zoom: 1 };
@@ -93,11 +103,11 @@ export class Scene {
   }
 }
 
-export function serialize(scene) {
+function serialize(scene) {
   return JSON.stringify(scene, null, 2);
 }
 
-export function deserialize(str) {
+function deserialize(str) {
   let s;
   try {
     s = JSON.parse(str);
@@ -108,7 +118,7 @@ export function deserialize(str) {
   return s;
 }
 
-export function validateScene(s, opts = {}) {
+function validateScene(s, opts = {}) {
   if (!s || typeof s !== 'object') throw new Error('validateScene: scene must be an object');
   if (s.schemaVersion !== 1) throw new Error(`Unsupported schemaVersion: ${s.schemaVersion} (expected 1)`);
   if (!Array.isArray(s.entities)) throw new Error('validateScene: entities must be an array');
@@ -129,7 +139,7 @@ export function validateScene(s, opts = {}) {
 // parentId links until we hit a non-orbiting entity (the chain root) or
 // cycle back to one already visited. Throw on cycle or on chain length
 // exceeding maxDepth (default 8 — design §3.3).
-export function resolveOrbits(scene, opts = {}) {
+function resolveOrbits(scene, opts = {}) {
   const maxDepth = opts.maxDepth ?? 8;
   const byId = new Map(scene.entities.map(e => [e.id, e]));
   // Re-iterate a few times to find fixed points — but for the M2 tests, a
@@ -159,3 +169,10 @@ export function resolveOrbits(scene, opts = {}) {
   }
   return scene;
 }
+
+root.FsToyboxScene = {
+  ENTITY_KINDS, KIND_GPU, createEntity, Scene,
+  serialize, deserialize, validateScene, resolveOrbits,
+};
+
+})(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { Scene, createEntity } from '../src/scene.js';
-import { packEntitiesToDataTexture } from '../src/pack.js';
+import { Scene, createEntity } from '../src/index.js';
+import { packEntitiesToDataTexture } from '../src/index.js';
 
 // M7 Task 7.1 (RED) — slot alignment for Moon & Ring kinds.
 // Design §3.5: the shader sees a uniform motion:vec4 / render:vec4 per kind.

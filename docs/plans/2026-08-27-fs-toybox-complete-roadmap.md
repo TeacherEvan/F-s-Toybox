@@ -36,12 +36,12 @@ Complete the production build of **F's-Toybox**, a zero-dependency WebGL2 browse
 ### Effort & Surface Area
 - **Estimated Effort:** ~3–4 focused engineering sprints across 8 distinct milestone slices.
 - **Primary Surfaces Touched:**
-  - [`index.html`](file:///home/ewaldt/Documents/VS/GAMES/Fs-toybox/index.html) (GLSL fragment shader, engine loop, God Panel UI & DOM events)
-  - [`src/scene.js`](file:///home/ewaldt/Documents/VS/GAMES/Fs-toybox/src/scene.js) (Data model, entity definitions, validation, cycle detection)
-  - [`src/pack.js`](file:///home/ewaldt/Documents/VS/GAMES/Fs-toybox/src/pack.js) (Slot mappings, hierarchical coordinate resolution, binary data texture packing)
-  - [`scene.json`](file:///home/ewaldt/Documents/VS/GAMES/Fs-toybox/scene.json) (Default boot scene specification)
-  - [`tests/`](file:///home/ewaldt/Documents/VS/GAMES/Fs-toybox/tests/) (Unit tests, Playwright visual acceptance specs, golden fixtures)
-  - [`README.md`](file:///home/ewaldt/Documents/VS/GAMES/Fs-toybox/README.md) (2026 Linux desktop wallpaper deployment recipes)
+  - [`index.html`](index.html) (GLSL fragment shader, engine loop, God Panel UI & DOM events)
+  - [`src/scene.js`](src/scene.js) (Data model, entity definitions, validation, cycle detection)
+  - [`src/pack.js`](src/pack.js) (Slot mappings, hierarchical coordinate resolution, binary data texture packing)
+  - [`scene.json`](scene.json) (Default boot scene specification)
+  - [`tests/`](tests/) (Unit tests, Playwright visual acceptance specs, golden fixtures)
+  - [`README.md`](README.md) (2026 Linux desktop wallpaper deployment recipes)
 
 ---
 
@@ -237,14 +237,14 @@ M1-M6: Foundation + Planet  ──► [DONE - 39 Unit / 10 E2E Green]
 ### Milestone M6: Planet Kind (Banded Disk, Atmosphere Glow, Tilt & Spin)
 
 #### Task 6.1: Unit Tests & Slot Alignment for Planet Kind
-- **Files to touch:** [`src/scene.js`](file:///home/ewaldt/Documents/VS/GAMES/Fs-toybox/src/scene.js), [`src/pack.js`](file:///home/ewaldt/Documents/VS/GAMES/Fs-toybox/src/pack.js), [`tests/pack.test.js`](file:///home/ewaldt/Documents/VS/GAMES/Fs-toybox/tests/pack.test.js)
+- **Files to touch:** [`src/scene.js`](src/scene.js), [`src/pack.js`](src/pack.js), [`tests/pack.test.js`](tests/pack.test.js)
 - **TDD Step 1 (RED):** Write Vitest test asserting `createEntity('planet')` maps:
   - `motion`: `spin` (p0), `wobble` (p1), `tilt` (p2), `bandingSpeed` (p3)
   - `render`: `radius` (r0), `banding` (r1), `atmosphere` (r2), `unused` (r3=0)
 - **TDD Step 2 (GREEN):** Verify `MOTION_SLOTS.planet` and `RENDER_SLOTS.planet` in `src/pack.js` correctly populate slots.
 
 #### Task 6.2: GLSL `renderPlanet()` Implementation in `index.html`
-- **Files to touch:** [`index.html`](file:///home/ewaldt/Documents/VS/GAMES/Fs-toybox/index.html)
+- **Files to touch:** [`index.html`](index.html)
 - **GLSL Logic:**
   ```glsl
   void renderPlanet(Entity e, vec2 uv, float time, inout vec3 col) {
@@ -280,83 +280,83 @@ M1-M6: Foundation + Planet  ──► [DONE - 39 Unit / 10 E2E Green]
       }
   }
   ```
-- **TDD Step 3 (Visual Acceptance):** Create [`tests/e2e/planet.spec.js`](file:///home/ewaldt/Documents/VS/GAMES/Fs-toybox/tests/e2e/planet.spec.js) matching `docs/plans/2026-08-25-fs-toybox-golden-specs.md` (position `(-0.4, 0.3)`, disk radius ~50px, banding variance stddev ≥ 0.03). Run `npx playwright test tests/e2e/planet.spec.js` and capture `tests/golden/planet-1.png`.
+- **TDD Step 3 (Visual Acceptance):** Create [`tests/e2e/planet.spec.js`](tests/e2e/planet.spec.js) matching `docs/plans/2026-08-25-fs-toybox-golden-specs.md` (position `(-0.4, 0.3)`, disk radius ~50px, banding variance stddev ≥ 0.03). Run `npx playwright test tests/e2e/planet.spec.js` and capture `tests/golden/planet-1.png`.
 
 ---
 
 ### Milestone M7: Moon & Ring Kinds (Cratering, Libration, Orbit Parenting, Shadow Occlusion)
 
 #### Task 7.1: Orbit Parenting Chain & Slot Alignment
-- **Files to touch:** [`src/scene.js`](file:///home/ewaldt/Documents/VS/GAMES/Fs-toybox/src/scene.js), [`src/pack.js`](file:///home/ewaldt/Documents/VS/GAMES/Fs-toybox/src/pack.js), [`tests/pack.test.js`](file:///home/ewaldt/Documents/VS/GAMES/Fs-toybox/tests/pack.test.js)
+- **Files to touch:** [`src/scene.js`](src/scene.js), [`src/pack.js`](src/pack.js), [`tests/pack.test.js`](tests/pack.test.js)
 - **TDD Step 1 (RED):** Write Vitest test asserting Moon/Ring parent lookup resolves parent world coordinates and applies rotation offsets.
 - **TDD Step 2 (GREEN):** Implement slot mapping:
   - Moon: motion `[spin, wobble, libration, 0]`, render `[radius, craterDensity, albedo, 0]`
   - Ring: motion `[0, 0, 0, 0]`, render `[innerRadius, outerRadius, tilt, opacity]`
 
 #### Task 7.2: GLSL `renderMoon()` & `renderRing()` Implementation
-- **Files to touch:** [`index.html`](file:///home/ewaldt/Documents/VS/GAMES/Fs-toybox/index.html)
+- **Files to touch:** [`index.html`](index.html)
 - **GLSL Logic:**
   - `renderMoon()`: Spherical diffuse shading with high-frequency crater cellular noise and libration phase angle.
   - `renderRing()`: Elliptical transform `r = length(vec2(suv.x, suv.y / max(sin(tilt), 0.1)))`, smoothstep between `innerRadius` and `outerRadius`, modulated by concentric ring FBM and shadowed by the parent planet disk.
-- **TDD Step 3 (Visual Acceptance):** Add [`tests/e2e/moon-ring.spec.js`](file:///home/ewaldt/Documents/VS/GAMES/Fs-toybox/tests/e2e/moon-ring.spec.js). Verify moon cratering and ring shadow occlusion against `tests/golden/moon-1.png` and `tests/golden/ring-1.png`.
+- **TDD Step 3 (Visual Acceptance):** Add [`tests/e2e/moon-ring.spec.js`](tests/e2e/moon-ring.spec.js). Verify moon cratering and ring shadow occlusion against `tests/golden/moon-1.png` and `tests/golden/ring-1.png`.
 
 ---
 
 ### Milestone M8: Shooting Star & Comet Kinds (Linear Streaks & Dual Tails)
 
 #### Task 8.1: Kinematic Time Evaluation in Shader
-- **Files to touch:** [`src/pack.js`](file:///home/ewaldt/Documents/VS/GAMES/Fs-toybox/src/pack.js), [`index.html`](file:///home/ewaldt/Documents/VS/GAMES/Fs-toybox/index.html)
+- **Files to touch:** [`src/pack.js`](src/pack.js), [`index.html`](index.html)
 - **GLSL Logic:**
   - `renderShootingStar()`: Periodic lifetime loop `float tCycle = mod(time, e.motion.z) / e.motion.z`. Head travels along `(e.motion.x, e.motion.y) * tCycle`. Trail rendered via line-segment distance calculation with exponential fade.
   - `renderComet()`: Orbit path evaluated at `time * e.motion.x + e.motion.y`. Core coma glow + dual tails:
     - **Ion Tail:** Thin, straight, electric-blue, pointing directly anti-origin.
     - **Dust Tail:** Broad, curved, golden/white, deflected by orbital motion (`tailWobble`).
-- **TDD Step 2 (Visual Acceptance):** Add [`tests/e2e/comet-shootingstar.spec.js`](file:///home/ewaldt/Documents/VS/GAMES/Fs-toybox/tests/e2e/comet-shootingstar.spec.js). Verify streak geometry and dual-tail separation.
+- **TDD Step 2 (Visual Acceptance):** Add [`tests/e2e/comet-shootingstar.spec.js`](tests/e2e/comet-shootingstar.spec.js). Verify streak geometry and dual-tail separation.
 
 ---
 
 ### Milestone M9: Black Hole Kind (Event Horizon, Photon Ring, Lensing, Relativistic Jets)
 
 #### Task 9.1: Gravitational Lensing & Relativistic Jets GLSL
-- **Files to touch:** [`index.html`](file:///home/ewaldt/Documents/VS/GAMES/Fs-toybox/index.html)
+- **Files to touch:** [`index.html`](index.html)
 - **GLSL Logic:**
   - Recycles reference `evaluateQuasar()` body (cleaned of penguin dependencies).
   - Horizon: Pitch black absorption disk `r < e.render.x` (`schwarzschildRadius`).
   - Photon Ring: Intense narrow emission band at `r ≈ 1.5 * r_s`.
   - Accretion Disk: Doppler boosted swirl with relativistic beaming on approaching side.
   - Polar Jets: Exponential cross spikes driven by `spikeSharpness` and `jetReach` slots.
-- **TDD Step 2 (Visual Acceptance):** Add [`tests/e2e/blackhole.spec.js`](file:///home/ewaldt/Documents/VS/GAMES/Fs-toybox/tests/e2e/blackhole.spec.js). Assert central black hole core luminance < 0.02 and photon ring luminance > 0.8.
+- **TDD Step 2 (Visual Acceptance):** Add [`tests/e2e/blackhole.spec.js`](tests/e2e/blackhole.spec.js). Assert central black hole core luminance < 0.02 and photon ring luminance > 0.8.
 
 ---
 
 ### Milestone M10: Nebula Kind & Complete Save/Load UI
 
 #### Task 10.1: Volumetric Domain-Warped Nebula GLSL
-- **Files to touch:** [`index.html`](file:///home/ewaldt/Documents/VS/GAMES/Fs-toybox/index.html)
+- **Files to touch:** [`index.html`](index.html)
 - **GLSL Logic:** 3-octave domain warped FBM `fbm(local + fbm(local + time * e.motion.x))`, soft radial envelope, multi-hue color gradient mixing.
 
 #### Task 10.2: God Panel File I/O & Autosave Implementation
-- **Files to touch:** [`index.html`](file:///home/ewaldt/Documents/VS/GAMES/Fs-toybox/index.html)
+- **Files to touch:** [`index.html`](index.html)
 - **Logic:**
   - Wire `#save-btn`: generates downloadable `scene.json` Blob with formatted JSON.
   - Wire `#load-btn`: creates hidden file input, parses selected `.json`, runs `validateScene()`, applies to `window.scene`, and triggers `renderAll()`.
   - Wire canvas Drag-and-Drop (`dragover`, `drop`) events to parse dropped files.
   - Wire `#hide-all-btn` and `#pause-btn`.
-- **TDD Step 3 (E2E Test):** Create [`tests/e2e/saveload.spec.js`](file:///home/ewaldt/Documents/VS/GAMES/Fs-toybox/tests/e2e/saveload.spec.js) verifying full scene round-trip and drag-and-drop loading.
+- **TDD Step 3 (E2E Test):** Create [`tests/e2e/saveload.spec.js`](tests/e2e/saveload.spec.js) verifying full scene round-trip and drag-and-drop loading.
 
 ---
 
 ### Milestone M11: 2026 Linux Desktop Wallpaper Integration & 2D Fallback
 
 #### Task 11.1: 2026 Wallpaper Documentation & Recipes
-- **Files to touch:** [`README.md`](file:///home/ewaldt/Documents/VS/GAMES/Fs-toybox/README.md)
+- **Files to touch:** [`README.md`](README.md)
 - **Documentation Recipes:**
   1. **KDE Plasma 6:** Setup via `plasma6-wallpapers-webengine` or QML WebEngine wrapper.
   2. **Hyprland / Sway (Wayland):** Launching via `chromium --app="file://$(pwd)/index.html" --window-type=desktop` or background layer shell.
   3. **X11 Desktop:** Launching via `xwinwrap -ov -fs -- chromium --kiosk file://$(pwd)/index.html`.
 
 #### Task 11.2: 2D Canvas Fallback Robustness
-- **Files to touch:** [`index.html`](file:///home/ewaldt/Documents/VS/GAMES/Fs-toybox/index.html), [`tests/render-guard.test.js`](file:///home/ewaldt/Documents/VS/GAMES/Fs-toybox/tests/render-guard.test.js)
+- **Files to touch:** [`index.html`](index.html), [`tests/render-guard.test.js`](tests/render-guard.test.js)
 - **Verification:** Unit test asserting `paint2DFallback()` executes cleanly when `gl === null`.
 
 ---
@@ -364,7 +364,7 @@ M1-M6: Foundation + Planet  ──► [DONE - 39 Unit / 10 E2E Green]
 ### Milestone M12: Documentation Audit & Acceptance Gate Sign-Off
 
 #### Task 12.1: Final Traceability Matrix
-- **Files to touch:** [`docs/plans/2026-08-27-fs-toybox-acceptance.md`](file:///home/ewaldt/Documents/VS/GAMES/Fs-toybox/docs/plans/2026-08-27-fs-toybox-acceptance.md)
+- **Files to touch:** [`docs/plans/2026-08-27-fs-toybox-acceptance.md`](docs/plans/2026-08-27-fs-toybox-acceptance.md)
 - **Verification:** Assert all 8 Acceptance Criteria from design doc §10 are met with corresponding test evidence and golden screenshots.
 
 ---
@@ -372,9 +372,9 @@ M1-M6: Foundation + Planet  ──► [DONE - 39 Unit / 10 E2E Green]
 ### Milestone M13: Star Field Kind (Parallax Cluster Layers & Twinkling)
 
 #### Task 13.1: Per-Entity Star Field Shader & Data Slots
-- **Files to touch:** [`src/scene.js`](file:///home/ewaldt/Documents/VS/GAMES/Fs-toybox/src/scene.js), [`src/pack.js`](file:///home/ewaldt/Documents/VS/GAMES/Fs-toybox/src/pack.js), [`index.html`](file:///home/ewaldt/Documents/VS/GAMES/Fs-toybox/index.html)
+- **Files to touch:** [`src/scene.js`](src/scene.js), [`src/pack.js`](src/pack.js), [`index.html`](index.html)
 - **GLSL Logic:** Multi-layer grid point sampling with depth-dependent parallax scrolling, hash-based spectral star coloring, and temporal sin/cos twinkle modulation.
-- **TDD Step 2 (Visual Acceptance):** Add [`tests/e2e/starfield.spec.js`](file:///home/ewaldt/Documents/VS/GAMES/Fs-toybox/tests/e2e/starfield.spec.js) capturing `tests/golden/starField-1.png`.
+- **TDD Step 2 (Visual Acceptance):** Add [`tests/e2e/starfield.spec.js`](tests/e2e/starfield.spec.js) capturing `tests/golden/starField-1.png`.
 
 ---
 

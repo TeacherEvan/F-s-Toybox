@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { Scene, createEntity } from '../src/scene.js';
-import { packEntitiesToDataTexture, TEX_WIDTH } from '../src/pack.js';
+import { Scene, createEntity } from '../src/index.js';
+import { packEntitiesToDataTexture, TEX_WIDTH } from '../src/index.js';
 
 // Encoding: RGBA8 byte texture, 4096×1. Entity i owns bytes [i*64, i*64+64)
 // = 16 little-endian float32 values (design §5.1, §3.5).

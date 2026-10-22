@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Scene, createEntity, ENTITY_KINDS,
-         serialize, deserialize, validateScene } from '../src/scene.js';
+         serialize, deserialize, validateScene } from '../src/index.js';
 
 describe('Scene', () => {
   it('starts empty', () => {

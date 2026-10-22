@@ -12,11 +12,22 @@
 //   [0] kind (sign = visible)  [1] pos.x  [2] pos.y  [3] parentSlot-or-rotation
 //   [4] color.h/360  [5] s     [6] b      [7] scale
 //   [8..11]  motion p0..p3    [12..15] render r0..r3
-import { KIND_GPU } from './scene.js';
+//
+// Loaded as a CLASSIC script (not an ES module) so the app also works when
+// index.html is opened from disk (file://) — ES module imports of local files
+// are CORS-blocked on the opaque file:// origin. See src/scene.js for the
+// full rationale; the ESM facade for Vitest lives in src/index.js.
+(function (root) {
+'use strict';
 
-export const MAX_ENTITIES = 64;
+if (!root.FsToyboxScene) {
+  throw new Error('src/pack.js requires src/scene.js to be loaded first');
+}
+const { KIND_GPU } = root.FsToyboxScene;
+
+const MAX_ENTITIES = 64;
 const FLOATS_PER_ENTITY = 16;
-export const TEX_WIDTH = MAX_ENTITIES * FLOATS_PER_ENTITY; // 1024 texels
+const TEX_WIDTH = MAX_ENTITIES * FLOATS_PER_ENTITY; // 1024 texels
 
 // Per-kind named-field → slot map (design §3.5). The shader sees a uniform
 // motion:vec4 / render:vec4 regardless of kind; null leaves the slot at 0.
@@ -59,7 +70,7 @@ function slotValues(map, kind, obj) {
   return keys.map((k) => (k != null && k in obj ? obj[k] : 0));
 }
 
-export function resolveWorldPosition(entity, scene, time) {
+function resolveWorldPosition(entity, scene, time) {
   if (!entity.orbit || !entity.orbit.enabled || entity.orbit.parentId == null) {
     return entity.position;
   }
@@ -74,7 +85,7 @@ export function resolveWorldPosition(entity, scene, time) {
   };
 }
 
-export function packEntitiesToDataTexture(scene, time) {
+function packEntitiesToDataTexture(scene, time) {
   // 64 entities × 16 floats × 4 bytes = 4096 bytes = 1024 RGBA texels
   const bytes = new Uint8Array(MAX_ENTITIES * FLOATS_PER_ENTITY * 4);
   const dv = new DataView(bytes.buffer);
@@ -109,9 +120,16 @@ export function packEntitiesToDataTexture(scene, time) {
   return bytes;
 }
 
-export function uploadEntityTexture(gl, tex, bytes) {
+function uploadEntityTexture(gl, tex, bytes) {
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, tex);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, TEX_WIDTH, 1, 0,
                 gl.RGBA, gl.UNSIGNED_BYTE, bytes);
 }
+
+root.FsToyboxPack = {
+  MAX_ENTITIES, TEX_WIDTH,
+  resolveWorldPosition, packEntitiesToDataTexture, uploadEntityTexture,
+};
+
+})(typeof globalThis !== 'undefined' ? globalThis : this);

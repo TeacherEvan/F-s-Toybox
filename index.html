@@ -6,82 +6,561 @@
 <style>
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; overflow: hidden; background: #000;
-               font-family: ui-monospace, Menlo, Consolas, monospace; color: #cdd6e4; }
+               font-family: ui-monospace, Menlo, Consolas, monospace; color: var(--text-primary); }
+
+  /* ================================================================
+     TOKEN LAYER — perceptual oklch() scales for a cosmic control room
+     ================================================================ */
+  :root {
+    /* surfaces (elevation ladder: void → layer-1 → layer-2 → raised) */
+    --surface-void:      oklch(0.09 0.014 268);
+    --surface-layer-1:   oklch(0.145 0.018 266);
+    --surface-layer-2:   oklch(0.195 0.022 264);
+    --surface-raised:    oklch(0.255 0.024 262);
+    /* accents */
+    --accent-primary:    oklch(0.68 0.185 258);
+    --accent-primary-lo: oklch(0.58 0.170 258);
+    --accent-soft:       oklch(0.68 0.185 258 / 0.16);
+    --accent-glow:       oklch(0.72 0.165 290);
+    --status-nominal:    oklch(0.74 0.170 152);
+    --status-critical:   oklch(0.68 0.190 25);
+    /* text */
+    --text-primary:      oklch(0.96 0.005 265);
+    --text-secondary:    oklch(0.82 0.014 265);
+    --text-muted:        oklch(0.64 0.018 265);
+    --text-telemetry:    oklch(0.98 0.002 265);
+    /* lines + speculars */
+    --hairline:          oklch(1 0 0 / 0.085);
+    --hairline-strong:   oklch(1 0 0 / 0.16);
+    --specular:          oklch(1 0 0 / 0.14);
+    /* geometry + motion */
+    --radius-sm: 6px; --radius-md: 9px; --radius-lg: 13px;
+    --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+    /* layout */
+    --toolbar-h: 44px;
+    --strip-h: 24px;
+    --panel-w: 320px;
+  }
+
+  /* ================================================================
+     BASE
+     ================================================================ */
   #gl { position: fixed; inset: 0; z-index: 0; display: block;
         width: 100vw; height: 100vh; background: #000; }
 
-  /* ---- Top toolbar ---- */
-  #toolbar { position: fixed; top: 0; left: 0; right: 0; z-index: 10;
-             display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
-             padding: 6px 10px; background: rgba(8, 10, 18, 0.92);
-             border-bottom: 1px solid #223047; }
-  #toolbar button { background: #131a2a; color: #cdd6e4; border: 1px solid #2b3b57;
-                    border-radius: 4px; padding: 4px 9px; font: 12px inherit; cursor: pointer; }
-  #toolbar button:hover { background: #1d2740; }
+  ::selection { background: var(--accent-soft); color: var(--text-telemetry); }
+
+  /* Themed scrollbars — 8px, no layout shift (gutter reserved). */
+  #entity-list, #property-editor {
+    scrollbar-width: thin;
+    scrollbar-color: oklch(0.38 0.030 264) transparent;
+    scrollbar-gutter: stable;
+  }
+  #entity-list::-webkit-scrollbar, #property-editor::-webkit-scrollbar { width: 8px; }
+  #entity-list::-webkit-scrollbar-track, #property-editor::-webkit-scrollbar-track { background: transparent; }
+  #entity-list::-webkit-scrollbar-thumb, #property-editor::-webkit-scrollbar-thumb {
+    background: oklch(0.38 0.030 264 / 0.85);
+    border: 2px solid transparent;
+    background-clip: content-box;
+    border-radius: 999px;
+  }
+  #entity-list::-webkit-scrollbar-thumb:hover, #property-editor::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-primary-lo);
+    background-clip: content-box;
+  }
+
+  /* ================================================================
+     TACTILE BUTTON SYSTEM — six states (default/hover/active/focus/
+     loading/disabled).  Compositor-only animation: transform + opacity.
+     ================================================================ */
+  .btn-surgical,
+  #toolbar button,
+  .danger-row button {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 40px;
+    min-width: 80px;
+    padding: 0.5rem 1rem;
+    border-radius: var(--radius-md);
+    font-family: inherit;
+    font-size: 0.875rem;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
+    line-height: 1.25;
+    color: var(--text-primary);
+    background: linear-gradient(180deg, var(--surface-raised) 0%, var(--surface-layer-2) 100%);
+    border: 1px solid var(--hairline-strong);
+    box-shadow:
+      inset 0 1px 0 0 var(--specular),
+      0 1px 2px 0 oklch(0 0 0 / 0.45),
+      0 4px 8px -2px oklch(0 0 0 / 0.28);
+    user-select: none;
+    touch-action: manipulation;
+    cursor: pointer;
+    -webkit-font-smoothing: antialiased;
+    transition: transform 140ms var(--ease-out),
+                border-color 140ms var(--ease-out),
+                background-color 140ms var(--ease-out);
+  }
+  .btn-surgical::after,
+  #toolbar button::after,
+  .danger-row button::after {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    background: linear-gradient(180deg, oklch(1 0 0 / 0.07) 0%, oklch(1 0 0 / 0.00) 100%);
+    box-shadow:
+      inset 0 1px 0 0 oklch(1 0 0 / 0.24),
+      0 4px 12px -2px oklch(0 0 0 / 0.5),
+      0 0 16px -4px var(--accent-primary);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 140ms var(--ease-out);
+  }
+  @media (pointer: coarse) {
+    .btn-surgical, #toolbar button, .danger-row button { min-height: 44px; padding: 0.625rem 1.125rem; }
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .btn-surgical:hover:not(:disabled):not([aria-disabled="true"]):not([data-loading="true"]),
+    #toolbar button:hover:not(:disabled):not([aria-disabled="true"]):not([data-loading="true"]),
+    .danger-row button:hover:not(:disabled):not([aria-disabled="true"]):not([data-loading="true"]) {
+      border-color: oklch(1 0 0 / 0.28);
+      transform: translate3d(0, -1px, 0) scale(1.005);
+    }
+    .btn-surgical:hover:not(:disabled):not([aria-disabled="true"]):not([data-loading="true"])::after,
+    #toolbar button:hover:not(:disabled):not([aria-disabled="true"]):not([data-loading="true"])::after,
+    .danger-row button:hover:not(:disabled):not([aria-disabled="true"]):not([data-loading="true"])::after {
+      opacity: 1;
+    }
+  }
+  .btn-surgical:active:not(:disabled):not([aria-disabled="true"]):not([data-loading="true"]),
+  #toolbar button:active:not(:disabled):not([aria-disabled="true"]):not([data-loading="true"]),
+  .danger-row button:active:not(:disabled):not([aria-disabled="true"]):not([data-loading="true"]) {
+    transition-duration: 25ms;
+    transform: translate3d(0, 1px, 0) scale(0.985);
+    box-shadow: inset 0 2px 4px 0 oklch(0 0 0 / 0.65), 0 1px 1px 0 oklch(0 0 0 / 0.3);
+  }
+  .btn-surgical:active:not(:disabled):not([aria-disabled="true"]):not([data-loading="true"])::after,
+  #toolbar button:active:not(:disabled):not([aria-disabled="true"]):not([data-loading="true"])::after,
+  .danger-row button:active:not(:disabled):not([aria-disabled="true"]):not([data-loading="true"])::after {
+    opacity: 0;
+  }
+  .btn-surgical:focus-visible,
+  #toolbar button:focus-visible,
+  .danger-row button:focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+  }
+  .btn-surgical:disabled,
+  .btn-surgical[aria-disabled="true"],
+  #toolbar button:disabled,
+  #toolbar button[aria-disabled="true"],
+  .danger-row button:disabled,
+  .danger-row button[aria-disabled="true"] {
+    opacity: 0.45;
+    cursor: not-allowed;
+    filter: grayscale(40%);
+    box-shadow: none;
+    transform: none !important;
+  }
+  .btn-surgical[data-loading="true"],
+  #toolbar button[data-loading="true"],
+  .danger-row button[data-loading="true"] {
+    cursor: wait;
+  }
+  .btn-surgical[data-loading="true"] .btn-label,
+  #toolbar button[data-loading="true"] .btn-label,
+  .danger-row button[data-loading="true"] .btn-label {
+    visibility: hidden;
+  }
+  .btn-surgical .btn-spinner,
+  #toolbar button .btn-spinner,
+  .danger-row button .btn-spinner {
+    display: none;
+    position: absolute;
+    width: 1rem; height: 1rem;
+    border: 2px solid oklch(1 0 0 / 0.2);
+    border-top-color: var(--text-telemetry);
+    border-radius: 50%;
+    animation: btn-spin 600ms linear infinite;
+  }
+  .btn-surgical[data-loading="true"] .btn-spinner,
+  #toolbar button[data-loading="true"] .btn-spinner,
+  .danger-row button[data-loading="true"] .btn-spinner {
+    display: block;
+  }
+  @keyframes btn-spin { to { transform: rotate(360deg); } }
+
+  /* ================================================================
+     PANEL CHROME — toolbar / entity list / property editor / strip
+     ================================================================ */
+  #toolbar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+    padding: 6px 10px;
+    background: linear-gradient(180deg, var(--surface-layer-2) 0%, var(--surface-layer-1) 100%);
+    border-bottom: 1px solid var(--hairline);
+    box-shadow: inset 0 1px 0 0 var(--specular),
+                0 2px 10px -4px oklch(0 0 0 / 0.85);
+  }
   .toolbar-spacer { flex: 1; }
 
-  /* ---- Left: entity list ---- */
-  #entity-list { position: fixed; top: 44px; left: 0; bottom: 26px; width: 224px;
-                 z-index: 10; background: rgba(8, 10, 18, 0.88);
-                 border-right: 1px solid #223047; overflow-y: auto; padding: 8px; }
-  #entity-list h3 { margin: 0 0 6px 0; font-size: 11px; letter-spacing: 1px;
-                    color: #7f93b5; font-weight: normal; }
-  .entity-list-item { display: flex; align-items: center; gap: 6px; padding: 4px 6px;
-                      border-radius: 4px; cursor: pointer; font-size: 12px;
-                      white-space: nowrap; overflow: hidden; }
-  .entity-list-item:hover { background: #16203a; }
-  .entity-list-item.selected { background: #23345c; outline: 1px solid #3b5aa0; }
-  .entity-list-item .eye { cursor: pointer; color: #8fb0ff; }
+  #entity-list {
+    position: fixed; top: var(--toolbar-h, 44px); left: 0; bottom: var(--strip-h); width: 224px;
+    z-index: 10;
+    background: linear-gradient(180deg, var(--surface-layer-1) 0%, var(--surface-void) 100%);
+    border-right: 1px solid var(--hairline);
+    overflow-y: auto; padding: 10px 8px 12px;
+    box-shadow: inset 0 1px 0 0 oklch(1 0 0 / 0.07),
+                6px 0 16px -10px oklch(0 0 0 / 0.9);
+  }
+  #entity-count { font-variant-numeric: tabular-nums; color: var(--text-telemetry); }
+  #entity-list h3 {
+    margin: 0 0 8px; padding: 0 4px 8px;
+    font-size: 10px; letter-spacing: 0.18em; font-weight: 600;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--hairline);
+    display: flex; align-items: baseline; gap: 6px;
+  }
+
+  .entity-list-item {
+    position: relative;
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 8px 7px 10px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 12px;
+    white-space: nowrap;
+    min-height: 44px;
+    border: 1px solid transparent;
+    transition: background-color 140ms var(--ease-out), border-color 140ms var(--ease-out);
+  }
+  .entity-list-item::before {
+    content: "";
+    position: absolute;
+    left: 2px; top: 50%;
+    width: 2px; height: 0;
+    border-radius: 2px;
+    background: var(--accent-primary);
+    box-shadow: 0 0 8px var(--accent-primary);
+    transform: translateY(-50%);
+    transition: height 160ms var(--ease-out);
+  }
+  .entity-list-item:hover { background: oklch(1 0 0 / 0.045); border-color: var(--hairline); }
+  .entity-list-item.selected {
+    background: linear-gradient(90deg, var(--accent-soft) 0%, oklch(1 0 0 / 0.03) 70%);
+    border-color: oklch(1 0 0 / 0.13);
+  }
+  .entity-list-item.selected::before { height: 60%; }
+  .entity-list-item .eye {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px;
+    cursor: pointer;
+    color: var(--accent-primary);
+    font-size: 11px;
+    line-height: 1;
+    border-radius: 4px;
+    transition: color 140ms var(--ease-out), background-color 140ms var(--ease-out);
+  }
+  .entity-list-item .eye:hover { background: oklch(1 0 0 / 0.08); color: var(--text-telemetry); }
+  .entity-list-item .item-name {
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .entity-list-item .item-coords {
+    font-variant-numeric: tabular-nums;
+    font-size: 11px;
+    color: var(--text-muted);
+    letter-spacing: -0.01em;
+  }
   .entity-list-item.hidden-entity .item-name { opacity: 0.45; }
+  .entity-list-item.hidden-entity .item-coords { opacity: 0.35; }
+  .entity-list-item.hidden-entity .eye { color: var(--text-muted); opacity: 0.6; }
 
-  /* ---- Right: property editor (exactly 320px — Risk #9) ---- */
-  #property-editor { position: fixed; top: 44px; right: 0; bottom: 26px; width: 320px;
-                     z-index: 10; background: rgba(8, 10, 18, 0.92);
-                     border-left: 1px solid #223047; overflow-y: auto; padding: 12px; }
-  .property-editor h2 { margin: 0 0 10px 0; font-size: 13px; color: #e8eefc;
-                        font-weight: normal; }
-  #property-editor section { margin-bottom: 12px; border-top: 1px solid #223047;
-                             padding-top: 8px; }
-  #property-editor h3 { margin: 0 0 6px 0; font-size: 11px; letter-spacing: 1px;
-                        color: #7f93b5; font-weight: normal; }
-  .prop-row { display: grid; grid-template-columns: 86px 1fr 52px; gap: 6px;
-              align-items: center; font-size: 11px; margin-bottom: 4px; }
-  .prop-row output { text-align: right; color: #9fc0ff; }
-  .prop-row input[type="range"] { width: 100%; accent-color: #6f8fff; }
-  .editor-empty-hint { color: #66738f; font-size: 12px; }
+  #property-editor {
+    position: fixed; top: var(--toolbar-h, 44px); right: 0; bottom: var(--strip-h); width: var(--panel-w);
+    z-index: 10;
+    background: linear-gradient(180deg, var(--surface-layer-1) 0%, var(--surface-void) 100%);
+    border-left: 1px solid var(--hairline);
+    overflow-y: auto; padding: 14px 14px 20px;
+    box-shadow: inset 0 1px 0 0 oklch(1 0 0 / 0.07),
+                -6px 0 16px -10px oklch(0 0 0 / 0.9);
+  }
+  #property-editor h2 {
+    margin: 0 0 12px;
+    padding: 0 0 10px 10px;
+    position: relative;
+    font-size: 12px; letter-spacing: 0.02em;
+    color: var(--text-primary);
+    font-weight: 600;
+    border-bottom: 1px solid var(--hairline);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  #property-editor h2::before {
+    content: "";
+    position: absolute; left: 0; top: 1px; bottom: 1px;
+    width: 2px; border-radius: 2px;
+    background: linear-gradient(180deg, var(--accent-primary), var(--accent-glow));
+    box-shadow: 0 0 10px var(--accent-primary);
+  }
+  #property-editor section {
+    margin-bottom: 14px;
+    border-top: 1px solid var(--hairline);
+    padding-top: 10px;
+  }
+  #property-editor section:first-of-type { border-top: 0; padding-top: 0; }
+  #property-editor h3 {
+    margin: 0 0 8px;
+    font-size: 10px; letter-spacing: 0.18em; font-weight: 600;
+    color: var(--text-muted);
+    display: flex; align-items: center; gap: 8px;
+  }
+  #property-editor h3::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, var(--hairline) 0%, transparent 100%);
+  }
+
+  .prop-row {
+    display: grid;
+    grid-template-columns: 86px minmax(0, 1fr) 52px;
+    gap: 8px;
+    align-items: center;
+    font-size: 11px;
+    margin-bottom: 6px;
+    min-height: 44px;
+  }
+  .prop-row > span:first-child {
+    color: var(--text-secondary);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .prop-row output {
+    text-align: right;
+    color: var(--text-telemetry);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
+
+  /* --- Range slider: 4px inset track, glowing thumb, 44px hit target --- */
+  .prop-row input[type="range"] {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 44px;
+    margin: 0;
+    background: transparent;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .prop-row input[type="range"]::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 999px;
+    background:
+      linear-gradient(90deg,
+        var(--accent-primary) 0 var(--pct, 0%),
+        oklch(1 0 0 / 0.09) var(--pct, 0%) 100%);
+    box-shadow: inset 0 1px 2px oklch(0 0 0 / 0.6);
+  }
+  .prop-row input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 14px; height: 14px;
+    margin-top: -5px;
+    border-radius: 50%;
+    background: linear-gradient(180deg, oklch(0.93 0.02 258) 0%, var(--accent-primary) 100%);
+    border: 1px solid oklch(1 0 0 / 0.45);
+    box-shadow: 0 1px 3px oklch(0 0 0 / 0.65), 0 0 0 0 var(--accent-soft);
+    transition: box-shadow 160ms var(--ease-out), transform 160ms var(--ease-out);
+  }
+  .prop-row input[type="range"]:hover::-webkit-slider-thumb {
+    box-shadow: 0 1px 3px oklch(0 0 0 / 0.65), 0 0 0 6px var(--accent-soft);
+  }
+  .prop-row input[type="range"]:active::-webkit-slider-thumb {
+    transform: scale(1.15);
+    box-shadow: 0 1px 3px oklch(0 0 0 / 0.65), 0 0 0 8px var(--accent-soft);
+  }
+  .prop-row input[type="range"]:focus-visible { outline: none; }
+  .prop-row input[type="range"]:focus-visible::-webkit-slider-thumb {
+    box-shadow: 0 1px 3px oklch(0 0 0 / 0.65), 0 0 0 3px oklch(0.98 0.002 265 / 0.9);
+  }
+  .prop-row input[type="range"]::-moz-range-track {
+    height: 4px; border-radius: 999px;
+    background: oklch(1 0 0 / 0.09);
+    box-shadow: inset 0 1px 2px oklch(0 0 0 / 0.6);
+  }
+  .prop-row input[type="range"]::-moz-range-progress {
+    height: 4px; border-radius: 999px;
+    background: var(--accent-primary);
+  }
+  .prop-row input[type="range"]::-moz-range-thumb {
+    width: 13px; height: 13px; border-radius: 50%;
+    background: linear-gradient(180deg, oklch(0.93 0.02 258) 0%, var(--accent-primary) 100%);
+    border: 1px solid oklch(1 0 0 / 0.45);
+    box-shadow: 0 1px 3px oklch(0 0 0 / 0.65);
+    transition: box-shadow 160ms var(--ease-out), transform 160ms var(--ease-out);
+  }
+  .prop-row input[type="range"]:hover::-moz-range-thumb { box-shadow: 0 1px 3px oklch(0 0 0 / 0.65), 0 0 0 6px var(--accent-soft); }
+  .prop-row input[type="range"]:active::-moz-range-thumb { transform: scale(1.15); }
+  .prop-row input[type="range"]:focus-visible { outline: none; }
+  .prop-row input[type="range"]:focus-visible::-moz-range-thumb {
+    box-shadow: 0 1px 3px oklch(0 0 0 / 0.65), 0 0 0 3px oklch(0.98 0.002 265 / 0.9);
+  }
+
+  /* --- Visibility switch (replaces the default blue checkbox) --- */
+  .prop-row input[type="checkbox"] {
+    -webkit-appearance: none; appearance: none;
+    position: relative;
+    width: 44px; height: 24px;
+    margin: 0;
+    border-radius: 999px;
+    background: oklch(1 0 0 / 0.08);
+    border: 1px solid var(--hairline-strong);
+    box-shadow: inset 0 1px 3px oklch(0 0 0 / 0.6);
+    cursor: pointer;
+    background-repeat: no-repeat;
+    background-size: 16px 16px;
+    background-position: 3px center;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><circle cx='8' cy='8' r='6' fill='%23cdd6e4'/></svg>");
+    transition: background-color 160ms var(--ease-out), background-position 180ms var(--ease-out), border-color 160ms var(--ease-out);
+  }
+  .prop-row input[type="checkbox"]:checked {
+    background-color: var(--accent-primary);
+    border-color: oklch(1 0 0 / 0.35);
+    background-position: 25px center;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><circle cx='8' cy='8' r='6' fill='%23ffffff'/></svg>");
+    box-shadow: inset 0 1px 3px oklch(0 0 0 / 0.35), 0 0 10px -2px var(--accent-primary);
+  }
+  .prop-row input[type="checkbox"]:focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+  }
+
+  /* --- Danger row --- */
   .danger-row { display: flex; gap: 8px; }
-  .danger-row button { flex: 1; background: #2a1520; color: #ffb3c0; border: 1px solid #5c2b3b;
-                       border-radius: 4px; padding: 5px 0; font: 12px inherit; cursor: pointer; }
-  .danger-row button[data-action="duplicate"] { background: #14261a; color: #a9e8b8;
-                                                border-color: #2b5c3b; }
+  .danger-row button {
+    flex: 1;
+    min-width: 0;
+    border-radius: var(--radius-sm);
+    padding: 5px 0;
+    font: 12px inherit;
+    letter-spacing: 0.02em;
+  }
+  .danger-row button[data-action="duplicate"] {
+    background: linear-gradient(180deg, oklch(0.30 0.045 155) 0%, oklch(0.20 0.030 155) 100%);
+    color: oklch(0.90 0.06 155);
+    border-color: oklch(0.55 0.09 155 / 0.35);
+  }
+  .danger-row button[data-action="duplicate"]::after {
+    box-shadow: inset 0 1px 0 0 oklch(1 0 0 / 0.18), 0 0 16px -4px oklch(0.7 0.15 155);
+  }
+  .danger-row button[data-action="delete"] {
+    background: linear-gradient(180deg, oklch(0.30 0.055 22) 0%, oklch(0.20 0.035 22) 100%);
+    color: oklch(0.93 0.04 30);
+    border-color: oklch(0.58 0.12 25 / 0.38);
+  }
+  .danger-row button[data-action="delete"]::after {
+    box-shadow: inset 0 1px 0 0 oklch(1 0 0 / 0.18), 0 0 16px -4px oklch(0.7 0.16 25);
+  }
 
-  /* ---- Bottom strip + status ---- */
-  #bottom-strip { position: fixed; bottom: 0; left: 0; right: 0; height: 24px; z-index: 10;
-                  display: flex; align-items: center; gap: 14px; padding: 0 10px;
-                  background: rgba(8, 10, 18, 0.92); border-top: 1px solid #223047;
-                  font-size: 11px; color: #7f93b5; cursor: pointer; }
-  #status { position: fixed; left: 236px; bottom: 4px; z-index: 30;
-            color: #8c8; font-size: 11px; }
-  #status.err { color: #f88; }
+  .editor-empty-hint {
+    margin: 24px 0;
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.7;
+    text-align: center;
+    opacity: 0.85;
+  }
+  .editor-empty-hint::before {
+    content: "◌";
+    display: block;
+    font-size: 26px;
+    line-height: 1;
+    margin-bottom: 12px;
+    color: oklch(0.55 0.06 265);
+    text-shadow: 0 0 18px oklch(0.68 0.185 258 / 0.55);
+  }
+
+  /* ================================================================
+     BOTTOM STRIP + STATUS
+     ================================================================ */
+  #bottom-strip {
+    position: fixed; bottom: 0; left: 0; right: 0; height: var(--strip-h); z-index: 10;
+    display: flex; align-items: center; gap: 14px; padding: 0 12px;
+    background: linear-gradient(180deg, var(--surface-layer-1) 0%, var(--surface-void) 100%);
+    border-top: 1px solid var(--hairline);
+    font-size: 11px;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+    box-shadow: inset 0 1px 0 0 oklch(1 0 0 / 0.06);
+    user-select: none;
+  }
+  #bottom-strip:hover { color: var(--text-secondary); }
+
+  #status {
+    position: fixed; left: 236px; bottom: 5px; z-index: 30;
+    display: flex; align-items: center; gap: 7px;
+    color: var(--status-nominal);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.04em;
+    pointer-events: none;
+  }
+  #status::before {
+    content: "";
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--status-nominal);
+    box-shadow: 0 0 8px var(--status-nominal), 0 0 16px oklch(0.74 0.17 152 / 0.55);
+  }
+  #status.err { color: var(--status-critical); }
+  #status.err::before {
+    background: var(--status-critical);
+    box-shadow: 0 0 8px var(--status-critical);
+  }
+
+  /* ================================================================
+     REDUCED MOTION
+     ================================================================ */
+  @media (prefers-reduced-motion: reduce) {
+    .btn-surgical, #toolbar button, .danger-row button,
+    .btn-surgical::after, #toolbar button::after, .danger-row button::after,
+    .entity-list-item, .entity-list-item::before,
+    .prop-row input[type="range"]::-webkit-slider-thumb,
+    .prop-row input[type="range"]::-moz-range-thumb,
+    .prop-row input[type="checkbox"] {
+      transition-duration: 0.01ms !important;
+      transform: none !important;
+      animation-duration: 1.5s !important;
+    }
+  }
 </style>
 </head>
 <body>
 <canvas id="gl"></canvas>
 
 <div id="toolbar">
-  <button data-add="galaxy">+ Galaxy</button>
-  <button data-add="planet">+ Planet</button>
-  <button data-add="moon">+ Moon</button>
-  <button data-add="ring">+ Ring</button>
-  <button data-add="shootingStar">+ Shooting</button>
-  <button data-add="blackHole">+ BHole</button>
-  <button data-add="nebula">+ Nebula</button>
-  <button data-add="comet">+ Comet</button>
+  <button data-add="galaxy"><span class="btn-label">+ Galaxy</span><span class="btn-spinner" aria-hidden="true"></span></button>
+  <button data-add="planet"><span class="btn-label">+ Planet</span><span class="btn-spinner" aria-hidden="true"></span></button>
+  <button data-add="moon"><span class="btn-label">+ Moon</span><span class="btn-spinner" aria-hidden="true"></span></button>
+  <button data-add="ring"><span class="btn-label">+ Ring</span><span class="btn-spinner" aria-hidden="true"></span></button>
+  <button data-add="shootingStar"><span class="btn-label">+ Shooting</span><span class="btn-spinner" aria-hidden="true"></span></button>
+  <button data-add="blackHole"><span class="btn-label">+ BHole</span><span class="btn-spinner" aria-hidden="true"></span></button>
+  <button data-add="nebula"><span class="btn-label">+ Nebula</span><span class="btn-spinner" aria-hidden="true"></span></button>
+  <button data-add="comet"><span class="btn-label">+ Comet</span><span class="btn-spinner" aria-hidden="true"></span></button>
   <span class="toolbar-spacer"></span>
-  <button id="hide-all-btn">☰ Hide All</button>
-  <button id="pause-btn">⏸ Pause</button>
-  <button id="save-btn">💾 Save</button>
-  <button id="load-btn">⤓ Load</button>
+  <button id="hide-all-btn"><span class="btn-label">☰ Hide All</span><span class="btn-spinner" aria-hidden="true"></span></button>
+  <button id="pause-btn"><span class="btn-label">⏸ Pause</span><span class="btn-spinner" aria-hidden="true"></span></button>
+  <button id="save-btn"><span class="btn-label">💾 Save</span><span class="btn-spinner" aria-hidden="true"></span></button>
+  <button id="load-btn"><span class="btn-label">⤓ Load</span><span class="btn-spinner" aria-hidden="true"></span></button>
 </div>
 
 <div id="entity-list">
@@ -104,9 +583,16 @@
   });
 </script>
 
+<!-- src/scene.js + src/pack.js are CLASSIC scripts, not ES modules: ES module
+     imports of local files are CORS-blocked on the opaque file:// origin, so
+     the module script never ran when index.html was opened from disk (the
+     documented wallpaper deployment) and the "+ Add" buttons spawned nothing. -->
+<script src="./src/scene.js"></script>
+<script src="./src/pack.js"></script>
+
 <script type="module">
-import { Scene, createEntity, serialize, deserialize } from './src/scene.js';
-import { uploadEntityTexture, packEntitiesToDataTexture } from './src/pack.js';
+const { Scene, createEntity, serialize, deserialize } = globalThis.FsToyboxScene;
+const { uploadEntityTexture, packEntitiesToDataTexture, resolveWorldPosition } = globalThis.FsToyboxPack;
 
 const KIND_LABELS = {
   galaxy: 'Galaxy', planet: 'Planet', moon: 'Moon',
@@ -185,8 +671,16 @@ function renderEntityList() {
     <div class="entity-list-item${e.id === state.selectedId ? ' selected' : ''}${e.visible ? '' : ' hidden-entity'}"
          draggable="true" data-id="${e.id}">
       <span class="eye" title="Toggle visibility">${e.visible ? '▣' : '▢'}</span>
-      <span class="item-name">${esc(e.name)} · (${e.position.x.toFixed(2)}, ${e.position.y.toFixed(2)})</span>
+      <span class="item-name">${esc(e.name)}</span>
+      <span class="item-coords">(${e.position.x.toFixed(2)}, ${e.position.y.toFixed(2)})</span>
     </div>`).join('');
+}
+
+// Slider fill fraction (0..1) for the themed track gradient.
+function fillPct(min, max, value) {
+  const lo = Number(min), hi = Number(max), v = Number(value);
+  if (!Number.isFinite(lo) || !Number.isFinite(hi) || hi === lo) return 0;
+  return Math.min(100, Math.max(0, ((v - lo) / (hi - lo)) * 100));
 }
 
 function propRow(label, path, value) {
@@ -196,8 +690,9 @@ function propRow(label, path, value) {
       <input type="checkbox" data-prop="${path}" ${value ? 'checked' : ''}>
       <output>${value ? 'on' : 'off'}</output></label>`;
   }
+  const pct = fillPct(r.min, r.max, value).toFixed(2);
   return `<label class="prop-row"><span>${esc(label)}</span>
-    <input type="range" data-prop="${path}" min="${r.min}" max="${r.max}" step="${r.step}" value="${value}">
+    <input type="range" data-prop="${path}" min="${r.min}" max="${r.max}" step="${r.step}" value="${value}" style="--pct:${pct}%">
     <output>${fmtVal(value)}</output></label>`;
 }
 
@@ -235,8 +730,8 @@ function renderPropertyEditor() {
     <section>
       <h3>DANGER</h3>
       <div class="danger-row">
-        <button data-action="duplicate">Duplicate</button>
-        <button data-action="delete">Delete</button>
+        <button data-action="duplicate"><span class="btn-label">Duplicate</span><span class="btn-spinner" aria-hidden="true"></span></button>
+        <button data-action="delete"><span class="btn-label">Delete</span><span class="btn-spinner" aria-hidden="true"></span></button>
       </div>
     </section>`;
 }
@@ -247,6 +742,20 @@ function renderAll() {
 }
 
 /* ---------- events ---------- */
+
+/* The toolbar wraps onto extra rows when the window is narrow. Publish its
+   real height so the side panels start below it — otherwise they cover the
+   wrapped rows and the "+ Add" buttons stop receiving clicks. */
+const toolbarEl = document.getElementById('toolbar');
+function syncToolbarHeight() {
+  const h = Math.round(toolbarEl.getBoundingClientRect().height);
+  if (h > 0) document.documentElement.style.setProperty('--toolbar-h', `${h}px`);
+}
+if (typeof ResizeObserver !== 'undefined') {
+  new ResizeObserver(syncToolbarHeight).observe(toolbarEl);
+}
+window.addEventListener('resize', syncToolbarHeight);
+syncToolbarHeight();
 
 document.getElementById('toolbar').addEventListener('click', (ev) => {
   const btn = ev.target.closest('[data-add]');
@@ -306,6 +815,9 @@ document.getElementById('property-editor').addEventListener('input', (ev) => {
   if (!path || !e) return;
   const value = t.type === 'checkbox' ? t.checked : Number(t.value);
   setProp(e, path, value);
+  if (t.type === 'range') {
+    t.style.setProperty('--pct', `${fillPct(t.min, t.max, t.value).toFixed(2)}%`);
+  }
   const out = t.closest('.prop-row')?.querySelector('output');
   if (out) out.textContent = fmtVal(value);
   renderEntityList();
@@ -385,13 +897,13 @@ uniform float uZoom;
 uniform float uSeed;
 uniform float uSpiralSpeed;
 uniform float uStarDensity;
+uniform int   uEntityCount;   // live entity slots — the packer fills 0..N-1
 uniform sampler2D uEntityTex;
 
 out vec4 fragColor;
 
 #define PI 3.14159265359
 #define TWO_PI 6.28318530718
-#define MAX_ENTITIES 64
 
 mat2 rotate2D(float angle) {
     float s = sin(angle), c = cos(angle);
@@ -534,7 +1046,11 @@ vec3 hsv2rgb(vec3 c) {
 void renderGalaxy(Entity e, vec2 uv, float time, inout vec3 col) {
     vec2 suv = uv / max(e.scale, 0.01);
     float r = length(suv);
-    if (r > 1.8) return; // cheap cull beyond reach
+    // Exact coverage edge: coverage = 1 - smoothstep(0.185, 0.235, r) is 0
+    // beyond r=0.235, so anything past it cannot change the frame. The old
+    // r>1.8 cull let the fbm() below run over ~58x more area than the galaxy
+    // can ever paint into (it was the dominant per-pixel cost).
+    if (r > 0.235) return;
 
     float spinAng = e.baseRotation + time * e.motion.x;
     float wobble = e.motion.z * sin(time * 0.5);
@@ -639,7 +1155,12 @@ void main() {
 
     vec3 col = renderCosmos(uv, iTime);
 
-    for (int i = 0; i < MAX_ENTITIES; i++) {
+    // Only the LIVE slots are walked. The packer writes entities contiguously
+    // from slot 0, so uEntityCount bounds the loop exactly. Walking all
+    // MAX_ENTITIES slots cost 64 x 16 texelFetch per PIXEL (~1e9 fetches per
+    // frame at 720p) even for an empty scene — the single biggest frame-time
+    // item in the renderer.
+    for (int i = 0; i < uEntityCount; i++) {
         Entity e = readEntity(i);
         if (e.kind <= 0) continue; // 0 = unused slot; < 0 = hidden (sign-packed)
         vec2 local = uv - e.pos;
@@ -651,6 +1172,10 @@ void main() {
         // Black hole (6) → dark horizon + spikes + jets; nebula (7) → soft cloud.
         float rr = length(local) / max(e.scale, 0.01);
         if (e.kind == 6) {
+            // Every black-hole term (exp(-rr*rr*120), the two spike exps, the
+            // vertical jet) is identically 0 beyond ~1.2 world units, so the
+            // per-pixel exp() work below is skipped outside that disc.
+            if (length(local) > 1.2) continue;
             rr = length(local) / max(e.scale * max(e.render.x, 0.01), 0.001);
             float spikeSharp = clamp(e.render.z, 0.01, 1.0);
             float spikeW = 0.015 + 0.02 * spikeSharp;
@@ -723,11 +1248,24 @@ function compileShader(gl, type, src, label) {
 let camYaw = 0, camPitch = 0;
 let prevPacked = null; // frozen scenes skip redraw until scene/camera data changes
 
+/* ---- Adaptive render scale (module scope: the bottom strip reports it) --
+   The fragment shader is fill-rate bound and the app targets "aged
+   wallpaper-GPU drivers" (design Risk #6): a weak GPU drops frames rather
+   than rendering them slower. The canvas backing store shrinks first (the
+   DOM UI stays native-DPI crisp); the shader is soft enough that a lower
+   buffer reads as smooth motion instead of a stutter.
+   Frozen mode (?t=) disables it so golden captures stay deterministic. */
+const MIN_RENDER_SCALE = 0.5;
+let renderScale = 1;
+let frameIntervalEMA = 16.7;
+let nextScaleChangeAt = 0;
+
 function updateBottomStrip() {
   const zoom = scene ? scene.camera.zoom : 1;
   const paused = scene && scene.globalMotion.paused ? ' · paused' : '';
+  const scale = renderScale;
   document.getElementById('bottom-strip').textContent =
-    `cam yaw ${camYaw.toFixed(2)} · pitch ${camPitch.toFixed(2)} · zoom ${zoom.toFixed(2)}${paused}`;
+    `cam yaw ${camYaw.toFixed(2)} · pitch ${camPitch.toFixed(2)} · zoom ${zoom.toFixed(2)} · render ${Math.round(scale * 100)}%${paused}`;
 }
 
 function startEngine(gl) {
@@ -754,7 +1292,8 @@ function startEngine(gl) {
 
   const U = {};
   for (const name of ['iResolution', 'iTime', 'uChroma', 'uGrain', 'uMouse',
-                      'uZoom', 'uSeed', 'uSpiralSpeed', 'uStarDensity', 'uEntityTex']) {
+                      'uZoom', 'uSeed', 'uSpiralSpeed', 'uStarDensity',
+                      'uEntityCount', 'uEntityTex']) {
     U[name] = gl.getUniformLocation(prog, name);
   }
 
@@ -798,10 +1337,11 @@ function startEngine(gl) {
     return gl.getError();
   };
 
+  /* ---- Adaptive render scale (state lives at module scope) ---- */
   function resize() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const w = Math.max(1, Math.floor(window.innerWidth * dpr));
-    const h = Math.max(1, Math.floor(window.innerHeight * dpr));
+    const w = Math.max(1, Math.floor(window.innerWidth * dpr * renderScale));
+    const h = Math.max(1, Math.floor(window.innerHeight * dpr * renderScale));
     if (canvas.width !== w || canvas.height !== h) {
       canvas.width = w; canvas.height = h;
       gl.viewport(0, 0, w, h);
@@ -868,12 +1408,14 @@ function startEngine(gl) {
 let lastNow = performance.now();
   let elapsed = 0;
   const TARGET_FRAME_MS = 1000 / 60; // ~16.67ms for 60fps
+  const FRAME_TOLERANCE_MS = 1.0;    // rAF jitter slack for the limiter
   let lastDrawTime = 0;
 
   function frame(now) {
     requestAnimationFrame(frame);
     resize();
     if (!scene) return;
+    const prevDrawTime = lastDrawTime;
     const frozen = FROZEN_T !== null;
     const dt = Math.min((now - lastNow) / 1000, 0.1);
     lastNow = now;
@@ -882,8 +1424,11 @@ let lastNow = performance.now();
     }
     const t = FROZEN_T !== null ? FROZEN_T : elapsed;
 
-    // Frame rate limiting: skip if not enough time has passed since last draw
-    if (!frozen && now - lastDrawTime < TARGET_FRAME_MS) return;
+    // Frame rate limiting: skip if not enough time has passed since last draw.
+    // The tolerance matters: rAF timestamps land a few tenths of a ms short of
+    // the 16.67 ms target, so a strict compare skipped every other frame
+    // (measured 40 fps instead of 60 on a 60 Hz display).
+    if (!frozen && now - lastDrawTime < TARGET_FRAME_MS - FRAME_TOLERANCE_MS) return;
 
     const packed = packEntitiesToDataTexture(scene, t);
     if (frozen && prevPacked && prevPacked.length === packed.length) {
@@ -906,10 +1451,34 @@ let lastNow = performance.now();
     gl.uniform1f(U.uSeed, SEED);
     gl.uniform1f(U.uSpiralSpeed, scene.background.spiralSpeed);
     gl.uniform1f(U.uStarDensity, scene.background.starDensity);
+    gl.uniform1i(U.uEntityCount, Math.min(scene.entities.length, 64));
 
     gl.clearColor(0, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+    /* ---- Adaptive resolution (live mode only) --------------------------
+       The presented-frame interval is the honest GPU-load signal: when the
+       GPU cannot keep up, rAF stretches past vsync. Trade buffer resolution
+       for frame rate instead of dropping frames. Hysteresis + cooldown keep
+       it from oscillating. */
+    if (!frozen && now >= nextScaleChangeAt) {
+      const interval = now - prevDrawTime;
+      frameIntervalEMA = frameIntervalEMA * 0.88 + interval * 0.12;
+      if (frameIntervalEMA > 20.0 && renderScale > MIN_RENDER_SCALE) {
+        renderScale = Math.max(MIN_RENDER_SCALE, renderScale - 0.15);
+        nextScaleChangeAt = now + 1500;
+        frameIntervalEMA = 16.7;
+        resize();
+        updateBottomStrip();
+      } else if (frameIntervalEMA < 17.5 && renderScale < 1) {
+        renderScale = Math.min(1, renderScale + 0.1);
+        nextScaleChangeAt = now + 3000;
+        frameIntervalEMA = 16.7;
+        resize();
+        updateBottomStrip();
+      }
+    }
     lastDrawTime = now;
   }
 

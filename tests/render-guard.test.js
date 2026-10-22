@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 
 import fs from 'node:fs';
-import { KIND_GPU } from '../src/scene.js';
+import { KIND_GPU } from '../src/index.js';
 
 describe('M5+ entity render guard', () => {
   it('blackHole kind is defined and non-zero GPU id', () => {
